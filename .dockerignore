@@ -1,0 +1,12 @@
+.git
+.gitignore
+data/
+keys/
+certs/
+config.yaml
+session.json
+*.db
+*.pem
+README.md
+Dockerfile
+docker-compose.yml

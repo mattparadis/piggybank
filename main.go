@@ -16,6 +16,7 @@ import (
 
 	"expense_monitor/internal/auth"
 	"expense_monitor/internal/config"
+	"expense_monitor/internal/enablebanking"
 	"expense_monitor/internal/server"
 	"expense_monitor/internal/syncer"
 )
@@ -32,7 +33,7 @@ func main() {
 		usage()
 		return
 	}
-	if cmd != "auth" && cmd != "serve" && cmd != "sync-once" {
+	if cmd != "auth" && cmd != "serve" && cmd != "sync-once" && cmd != "aspsps" {
 		fmt.Fprintf(os.Stderr, "comando sconosciuto: %q\n\n", cmd)
 		usage()
 		os.Exit(2)
@@ -63,7 +64,31 @@ func main() {
 		if err := syncer.RunOnce(ctx, cfg); err != nil {
 			fatalf("sync-once: %v", err)
 		}
+	case "aspsps":
+		if err := runASPSPs(ctx, cfg); err != nil {
+			fatalf("aspsps: %v", err)
+		}
 	}
+}
+
+// runASPSPs elenca le banche disponibili per il paese configurato, così da
+// individuare il valore esatto da mettere in enablebanking.aspsp_name.
+func runASPSPs(ctx context.Context, cfg *config.Config) error {
+	eb := cfg.EnableBanking
+	client, err := enablebanking.New(eb.BaseURL, eb.ApplicationID, eb.PrivateKeyPath)
+	if err != nil {
+		return err
+	}
+	banks, err := client.ListASPSPs(ctx, eb.Country)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Banche disponibili per %q (%d):\n", eb.Country, len(banks))
+	for _, b := range banks {
+		fmt.Printf("  %-40s [%s]\n", b.Name, b.Country)
+	}
+	fmt.Println("\nImposta enablebanking.aspsp_name con il nome esatto della tua banca.")
+	return nil
 }
 
 func usage() {
@@ -73,6 +98,7 @@ Uso:
   expense_monitor <comando> [--config config.yaml]
 
 Comandi:
+  aspsps      Elenca le banche disponibili per il paese configurato
   auth        Avvia il flusso di autorizzazione bancaria e salva la sessione
   serve       Avvia il daemon che sincronizza le transazioni periodicamente
   sync-once   Esegue una singola sincronizzazione ed esce

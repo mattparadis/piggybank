@@ -43,6 +43,9 @@ Per trovare il nome esatto della banca (`aspsp_name`) puoi consultare `GET /asps
 ```sh
 go build -o expense_monitor .
 
+# 0. trova il nome esatto della tua banca e mettilo in aspsp_name
+./expense_monitor aspsps --config config.yaml
+
 # 1. autorizzazione una tantum (apre il browser, salva session.json)
 ./expense_monitor auth --config config.yaml
 

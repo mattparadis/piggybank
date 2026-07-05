@@ -9,10 +9,10 @@ services:
       - "7777:7777"
     command: ["serve", "--config", "/config.yaml"]
     volumes:
-      - ./config.yaml:/config.yaml:ro   # configurazione
-      - ./keys:/keys:ro                 # chiave privata .pem
-      - ./certs:/certs:ro               # certificati Tailscale
-      - ./data:/data                    # session.json + expense_monitor.db (persistenti)
+      - /srv/piggybank/config.yaml:/config.yaml:ro   # configurazione
+      - /srv/piggybank/keys:/keys:ro                 # chiave privata .pem
+      - /srv/piggybank/certs:/certs:ro               # certificati Tailscale
+      - /srv/piggybank/data:/data                    # session.json + expense_monitor.db (persistenti)
 
 # Autorizzazione una tantum (scrive /data/session.json, poi il servizio la usa):
 #   docker compose run --rm --service-ports monitor auth --config /config.yaml

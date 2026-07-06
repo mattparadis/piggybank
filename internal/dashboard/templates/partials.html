@@ -3,9 +3,15 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>{{.}} · expense_monitor</title>
+	<script>
+	(function(){var t;try{t=localStorage.getItem('theme');}catch(e){}
+	if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}
+	document.documentElement.setAttribute('data-theme',t);})();
+	</script>
 	<link rel="stylesheet" href="/static/styles.css">
 	<script src="/static/htmx.min.js" defer></script>
 	<script src="/static/chart.umd.min.js" defer></script>
+	<script src="/static/app.js" defer></script>
 </head>
 {{end}}
 
@@ -16,6 +22,7 @@
 		<a href="/" class="{{if eq . "overview"}}active{{end}}">Overview</a>
 		<a href="/transactions" class="{{if eq . "transactions"}}active{{end}}">Transactions</a>
 	</nav>
+	<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
 </header>
 {{end}}
 
@@ -31,7 +38,7 @@
 		{{range .Rows}}
 		<tr>
 			<td class="mono">{{.Tx.BookingDate}}</td>
-			<td>{{template "desc" .Tx}}</td>
+			<td class="desc-cell">{{template "desc" .Tx}}</td>
 			<td><span class="chip" style="background:{{.Category.Color}}22;border-color:{{.Category.Color}}">{{.Category.Icon}} {{.Category.Name}}</span></td>
 			<td class="mono muted">{{.Tx.AccountUID}}</td>
 			<td class="num {{if lt .Tx.Amount 0.0}}neg{{else}}pos{{end}}">{{money .Tx.Amount}} {{.Tx.Currency}}</td>

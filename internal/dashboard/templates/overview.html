@@ -68,7 +68,7 @@
 			{{range .Recent}}
 				<tr>
 					<td class="mono">{{.Tx.BookingDate}}</td>
-					<td>{{template "desc" .Tx}}</td>
+					<td class="desc-cell">{{template "desc" .Tx}}</td>
 					<td><span class="chip" style="background:{{.Category.Color}}22;border-color:{{.Category.Color}}">{{.Category.Icon}} {{.Category.Name}}</span></td>
 					<td class="num {{if lt .Tx.Amount 0.0}}neg{{else}}pos{{end}}">{{money .Tx.Amount}} {{.Tx.Currency}}</td>
 				</tr>

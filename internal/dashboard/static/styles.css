@@ -1,6 +1,7 @@
 :root {
 	--bg: #f4f5f7;
 	--panel: #ffffff;
+	--input: #ffffff;
 	--ink: #1c2330;
 	--muted: #7a8394;
 	--line: #e5e8ee;
@@ -8,6 +9,18 @@
 	--pos: #2e9e5b;
 	--neg: #e0524a;
 	--radius: 12px;
+}
+
+[data-theme="dark"] {
+	--bg: #12151c;
+	--panel: #1b1f2a;
+	--input: #232836;
+	--ink: #e6e9f0;
+	--muted: #8b93a5;
+	--line: #2a2f3d;
+	--accent: #5b82f5;
+	--pos: #46b877;
+	--neg: #ec6a62;
 }
 
 * { box-sizing: border-box; }
@@ -82,20 +95,34 @@ main { max-width: 1080px; margin: 0 auto; padding: 24px; display: flex; flex-dir
 .tx-table { width: 100%; border-collapse: collapse; }
 .tx-table th, .tx-table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .tx-table th { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
-.tx-table td:nth-child(2) { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-table td.desc-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.tx-table td.desc-cell.expanded { white-space: normal; overflow: visible; word-break: break-word; }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--muted); }
 .filters .grow { flex: 1; min-width: 200px; }
 .filters input, .filters select {
-	padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff; color: var(--ink);
+	padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--input); color: var(--ink);
 }
 .filters button, .pager button {
 	padding: 8px 14px; border: 1px solid var(--accent); background: var(--accent); color: #fff;
 	border-radius: 8px; font-weight: 600; cursor: pointer;
 }
-.pager button { background: #fff; color: var(--accent); }
+.pager button { background: var(--panel); color: var(--accent); }
 
 .tx-meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 8px; }
 .pager { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+
+.theme-toggle {
+	margin-left: auto;
+	background: transparent;
+	border: 1px solid var(--line);
+	color: var(--ink);
+	border-radius: 8px;
+	padding: 6px 10px;
+	cursor: pointer;
+	font-size: 0.95rem;
+	line-height: 1;
+}
+.theme-toggle:hover { background: var(--bg); }

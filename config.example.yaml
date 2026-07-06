@@ -23,6 +23,39 @@ sync:
   times_per_day: 2          # numero di sincronizzazioni al giorno (intervallo = 24h / questo valore)
   initial_lookback_days: 90 # quanto indietro scaricare alla prima sync
 
+# Web dashboard (served by `serve` on auth_server.listen_addr over HTTPS,
+# reusing the auth_server TLS certificate). Protected by basic auth.
+dashboard:
+  enabled: true
+  basic_auth:
+    username: "me"
+    password: "change-me"          # config file is 0600; compared in constant time
+  # Category rules: a transaction is assigned the first category whose match_any
+  # keyword (case-insensitive substring) appears in its description/counterparty.
+  categories:
+    - name: "Groceries"
+      color: "#4caf50"
+      icon: "🛒"
+      match_any: ["ESSELUNGA", "COOP", "CONAD", "LIDL", "CARREFOUR"]
+    - name: "Dining"
+      color: "#ff9800"
+      icon: "🍽️"
+      match_any: ["RISTORANTE", "BAR", "PIZZ", "MCDONALD", "GLOVO", "DELIVEROO"]
+    - name: "Transport"
+      color: "#3f51b5"
+      icon: "🚗"
+      match_any: ["ENI", "Q8", "TRENITALIA", "ATM", "UBER", "TELEPASS"]
+    - name: "Utilities"
+      color: "#009688"
+      icon: "💡"
+      match_any: ["ENEL", "A2A", "TIM", "VODAFONE", "FASTWEB"]
+  # Monthly spending limits per category (shown as progress bars).
+  budgets:
+    - category: "Groceries"
+      monthly_limit: 400.0
+    - category: "Dining"
+      monthly_limit: 200.0
+
 # PREDISPOSTO per la prossima iterazione (non usato ora).
 telegram:
   enabled: false

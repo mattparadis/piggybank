@@ -72,6 +72,9 @@ func Sync(ctx context.Context, cfg *config.Config, client *enablebanking.Client,
 		res.Accounts++
 		res.NewTransactions += newTx
 
+		// Balances are best-effort: a failure here must not abort the sync.
+		syncBalances(ctx, client, st, acc.UID)
+
 		if err := st.SetSyncState(store.SyncState{
 			AccountUID:      acc.UID,
 			LastSyncedAt:    time.Now().UTC().Format(time.RFC3339),
@@ -81,6 +84,25 @@ func Sync(ctx context.Context, cfg *config.Config, client *enablebanking.Client,
 		}
 	}
 	return res, nil
+}
+
+// syncBalances fetches the current balances of an account and stores them.
+// Errors are ignored on purpose (balances are secondary to transactions).
+func syncBalances(ctx context.Context, client *enablebanking.Client, st *store.Store, accountUID string) {
+	balances, err := client.GetBalances(ctx, accountUID)
+	if err != nil {
+		return
+	}
+	for _, b := range balances {
+		amount, _ := strconv.ParseFloat(strings.TrimSpace(b.BalanceAmount.Amount), 64)
+		_ = st.UpsertBalance(store.BalanceRecord{
+			AccountUID:    accountUID,
+			BalanceType:   b.BalanceType,
+			Amount:        amount,
+			Currency:      b.BalanceAmount.Currency,
+			ReferenceDate: b.ReferenceDate,
+		})
+	}
 }
 
 // syncAccount pagina tutte le transazioni di un conto a partire da date_from

@@ -39,3 +39,13 @@ CREATE TABLE IF NOT EXISTS sync_state (
     last_synced_at    TEXT,
     last_booking_date TEXT
 );
+
+CREATE TABLE IF NOT EXISTS balances (
+    account_uid    TEXT NOT NULL REFERENCES accounts(account_uid),
+    balance_type   TEXT NOT NULL,           -- CLBD / XPCD / ...
+    amount         REAL NOT NULL,
+    currency       TEXT,
+    reference_date TEXT,
+    updated_at     TEXT NOT NULL,
+    PRIMARY KEY(account_uid, balance_type)
+);

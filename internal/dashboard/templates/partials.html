@@ -1,0 +1,53 @@
+{{define "head"}}
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{.}} · expense_monitor</title>
+	<link rel="stylesheet" href="/static/styles.css">
+	<script src="/static/htmx.min.js" defer></script>
+	<script src="/static/chart.umd.min.js" defer></script>
+</head>
+{{end}}
+
+{{define "nav"}}
+<header class="topbar">
+	<div class="brand">💶 expense_monitor</div>
+	<nav>
+		<a href="/" class="{{if eq . "overview"}}active{{end}}">Overview</a>
+		<a href="/transactions" class="{{if eq . "transactions"}}active{{end}}">Transactions</a>
+	</nav>
+</header>
+{{end}}
+
+{{define "txresults"}}
+<div class="tx-meta">
+	{{if .Total}}Showing {{.RangeStart}}–{{.RangeEnd}} of {{.Total}}{{else}}No transactions match the filters{{end}}
+</div>
+<table class="tx-table">
+	<thead>
+		<tr><th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="num">Amount</th></tr>
+	</thead>
+	<tbody>
+		{{range .Rows}}
+		<tr>
+			<td class="mono">{{.Tx.BookingDate}}</td>
+			<td>{{template "desc" .Tx}}</td>
+			<td><span class="chip" style="background:{{.Category.Color}}22;border-color:{{.Category.Color}}">{{.Category.Icon}} {{.Category.Name}}</span></td>
+			<td class="mono muted">{{.Tx.AccountUID}}</td>
+			<td class="num {{if lt .Tx.Amount 0.0}}neg{{else}}pos{{end}}">{{money .Tx.Amount}} {{.Tx.Currency}}</td>
+		</tr>
+		{{else}}
+		<tr><td colspan="5" class="muted">—</td></tr>
+		{{end}}
+	</tbody>
+</table>
+<div class="pager">
+	{{if .HasPrev}}<button hx-get="{{.PrevQuery}}" hx-target="#tx-results">← Prev</button>{{end}}
+	<span class="muted">Page {{.Page}} / {{.Pages}}</span>
+	{{if .HasNext}}<button hx-get="{{.NextQuery}}" hx-target="#tx-results">Next →</button>{{end}}
+</div>
+{{end}}
+
+{{define "desc"}}
+	{{if .Remittance}}{{.Remittance}}{{else if .CreditorName}}{{.CreditorName}}{{else if .DebtorName}}{{.DebtorName}}{{else if .Reference}}{{.Reference}}{{else}}—{{end}}
+{{end}}

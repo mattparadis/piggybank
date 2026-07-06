@@ -139,6 +139,16 @@ func (c *Client) GetSession(ctx context.Context, sessionID string) (*SessionResp
 	return &out, nil
 }
 
+// GetBalances retrieves the balances of an account.
+func (c *Client) GetBalances(ctx context.Context, accountUID string) ([]Balance, error) {
+	var out balancesResponse
+	path := "/accounts/" + url.PathEscape(accountUID) + "/balances"
+	if err := c.do(ctx, http.MethodGet, path, nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Balances, nil
+}
+
 // GetTransactionsPage recupera una pagina di transazioni di un conto.
 func (c *Client) GetTransactionsPage(ctx context.Context, accountUID string, p TransactionsParams) (*TransactionsPage, error) {
 	q := url.Values{}

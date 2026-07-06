@@ -33,7 +33,7 @@ func main() {
 		usage()
 		return
 	}
-	if cmd != "auth" && cmd != "serve" && cmd != "sync-once" && cmd != "aspsps" {
+	if cmd != "auth" && cmd != "serve" && cmd != "sync-once" && cmd != "aspsps" && cmd != "dashboard" {
 		fmt.Fprintf(os.Stderr, "comando sconosciuto: %q\n\n", cmd)
 		usage()
 		os.Exit(2)
@@ -68,6 +68,10 @@ func main() {
 		if err := runASPSPs(ctx, cfg); err != nil {
 			fatalf("aspsps: %v", err)
 		}
+	case "dashboard":
+		if err := server.RunDashboard(ctx, cfg); err != nil {
+			fatalf("dashboard: %v", err)
+		}
 	}
 }
 
@@ -100,8 +104,9 @@ Uso:
 Comandi:
   aspsps      Elenca le banche disponibili per il paese configurato
   auth        Avvia il flusso di autorizzazione bancaria e salva la sessione
-  serve       Avvia il daemon che sincronizza le transazioni periodicamente
+  serve       Avvia il daemon (sincronizzazione periodica + dashboard web)
   sync-once   Esegue una singola sincronizzazione ed esce
+  dashboard   Avvia solo la dashboard web (senza sincronizzazione)
   help        Mostra questo messaggio
 `)
 }

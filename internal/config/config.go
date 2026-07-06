@@ -14,6 +14,7 @@ type Config struct {
 	AuthServer    AuthServerConfig    `yaml:"auth_server"`
 	Storage       StorageConfig       `yaml:"storage"`
 	Sync          SyncConfig          `yaml:"sync"`
+	Dashboard     DashboardConfig     `yaml:"dashboard"`
 	Telegram      TelegramConfig      `yaml:"telegram"`
 }
 
@@ -42,6 +43,37 @@ type StorageConfig struct {
 type SyncConfig struct {
 	TimesPerDay         int `yaml:"times_per_day"`
 	InitialLookbackDays int `yaml:"initial_lookback_days"`
+}
+
+// DashboardConfig configures the web dashboard served by the `serve` daemon.
+// The dashboard listens on AuthServer.ListenAddr over HTTPS, reusing the
+// AuthServer TLS certificate (same Tailscale host).
+type DashboardConfig struct {
+	Enabled    bool       `yaml:"enabled"`
+	BasicAuth  BasicAuth  `yaml:"basic_auth"`
+	Categories []Category `yaml:"categories"`
+	Budgets    []Budget   `yaml:"budgets"`
+}
+
+// BasicAuth holds the credentials required to access the dashboard.
+type BasicAuth struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+// Category classifies a transaction when any of MatchAny (case-insensitive
+// substrings) is found in its description/counterparty text.
+type Category struct {
+	Name     string   `yaml:"name"`
+	Color    string   `yaml:"color"`
+	Icon     string   `yaml:"icon"`
+	MatchAny []string `yaml:"match_any"`
+}
+
+// Budget sets a monthly spending limit for a category.
+type Budget struct {
+	Category     string  `yaml:"category"`
+	MonthlyLimit float64 `yaml:"monthly_limit"`
 }
 
 // TelegramConfig è predisposto per la prossima iterazione (non usato ora).
@@ -110,6 +142,17 @@ func (c *Config) validate() error {
 	}
 	if c.Sync.TimesPerDay < 1 || c.Sync.TimesPerDay > 24 {
 		return fmt.Errorf("sync.times_per_day deve essere tra 1 e 24")
+	}
+	if c.Dashboard.Enabled {
+		if c.Dashboard.BasicAuth.Username == "" || c.Dashboard.BasicAuth.Password == "" {
+			return fmt.Errorf("dashboard.basic_auth.username e password sono richiesti quando dashboard.enabled è true")
+		}
+		if c.AuthServer.TLSCertPath == "" || c.AuthServer.TLSKeyPath == "" {
+			return fmt.Errorf("auth_server.tls_cert_path e tls_key_path sono richiesti per la dashboard HTTPS")
+		}
+		if c.AuthServer.ListenAddr == "" {
+			return fmt.Errorf("auth_server.listen_addr è richiesto per la dashboard")
+		}
 	}
 	return nil
 }

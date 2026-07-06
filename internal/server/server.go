@@ -7,9 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
+	"expense_monitor/internal/category"
 	"expense_monitor/internal/config"
+	"expense_monitor/internal/dashboard"
 	"expense_monitor/internal/enablebanking"
 	"expense_monitor/internal/notify"
 	"expense_monitor/internal/session"
@@ -36,8 +39,14 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		interval = time.Hour
 	}
 
-	// TODO(dashboard): avviare qui il server HTTP sulla porta configurata
-	// (auth_server.listen_addr, 7777) per servire la dashboard delle spese.
+	if cfg.Dashboard.Enabled {
+		stopDashboard, err := startDashboard(cfg, st, n)
+		if err != nil {
+			return err
+		}
+		defer stopDashboard()
+	}
+
 	// TODO(telegram): avviare qui il bot e usare un notify.TelegramNotifier
 	// applicando le regole di cfg.Telegram.Rules.
 
@@ -76,4 +85,48 @@ func runSync(ctx context.Context, cfg *config.Config, client *enablebanking.Clie
 		return
 	}
 	n.Info(fmt.Sprintf("sync ok: %d conti, %d nuove transazioni", res.Accounts, res.NewTransactions))
+}
+
+// startDashboard builds the dashboard handler and serves it over HTTPS in a
+// goroutine. The returned function shuts the server down gracefully.
+func startDashboard(cfg *config.Config, st *store.Store, n notify.Notifier) (func(), error) {
+	cat := category.Build(cfg.Dashboard.Categories, cfg.Dashboard.Budgets)
+	handler, err := dashboard.New(cfg, st, cat)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: %w", err)
+	}
+	srv := &http.Server{Addr: cfg.AuthServer.ListenAddr, Handler: handler}
+	go func() {
+		n.Info("dashboard in ascolto su https://" + cfg.AuthServer.ListenAddr)
+		err := srv.ListenAndServeTLS(cfg.AuthServer.TLSCertPath, cfg.AuthServer.TLSKeyPath)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			n.Alert("dashboard server: " + err.Error())
+		}
+	}()
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}, nil
+}
+
+// RunDashboard serves only the dashboard (no sync), until the context is done.
+func RunDashboard(ctx context.Context, cfg *config.Config) error {
+	if !cfg.Dashboard.Enabled {
+		return fmt.Errorf("dashboard.enabled è false: abilitala nel config")
+	}
+	st, err := store.Open(cfg.Storage.DBPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	stop, err := startDashboard(cfg, st, notify.LogNotifier{})
+	if err != nil {
+		return err
+	}
+	defer stop()
+
+	<-ctx.Done()
+	return nil
 }

@@ -81,6 +81,34 @@ docker compose up -d
 docker compose logs -f
 ```
 
+## Web dashboard
+
+The `serve` daemon also hosts a web dashboard on `auth_server.listen_addr` (port
+**7777**) over HTTPS (reusing the Tailscale certificate), protected by **basic auth**.
+Enable and configure it under `dashboard:` in `config.yaml`:
+
+```yaml
+dashboard:
+  enabled: true
+  basic_auth: { username: "me", password: "change-me" }
+  categories:          # first matching keyword wins (case-insensitive)
+    - { name: "Groceries", color: "#4caf50", icon: "🛒", match_any: ["ESSELUNGA","COOP"] }
+  budgets:
+    - { category: "Groceries", monthly_limit: 400.0 }
+```
+
+Open `https://HOST.TAILNET.ts.net:7777/` from a device on your tailnet and log in with
+the basic-auth credentials. The dashboard shows an overview (balances, monthly cash flow,
+spending by category with budget bars, recent transactions) and a searchable/filterable
+transaction list. Categories and budgets are recomputed from the YAML on every request —
+no reindexing needed when you change the rules.
+
+To run only the dashboard (no sync): `expense_monitor dashboard --config config.yaml`.
+
+> **Operational note:** the dashboard and the `auth` callback share port 7777. To
+> re-authorize when the session expires, stop the daemon first
+> (`docker compose stop`), run `auth`, then start it again.
+
 ## Ispezionare i dati
 
 ```sh
@@ -95,14 +123,16 @@ sqlite3 data/expense_monitor.db \
 ## Struttura del progetto
 
 ```
-main.go                     dispatch sottocomandi (auth | serve | sync-once)
+main.go                     dispatch sottocomandi (auth | serve | sync-once | dashboard | aspsps)
 internal/config             caricamento/validazione config YAML
 internal/session            persistenza session.json
-internal/enablebanking      client API (JWT RS256, endpoint)
-internal/store              SQLite (schema, upsert idempotente, sync_state)
+internal/enablebanking      client API (JWT RS256, endpoint, saldi)
+internal/store              SQLite (schema, upsert idempotente, query di lettura, sync_state)
 internal/auth               comando auth (callback HTTPS + creazione sessione)
-internal/syncer             motore di sincronizzazione incrementale
-internal/server             daemon serve (scheduler; dashboard/telegram: TODO)
+internal/syncer             motore di sincronizzazione incrementale (transazioni + saldi)
+internal/category           categorizzazione delle transazioni da regole YAML
+internal/dashboard          dashboard web (html/template + htmx + Chart.js embeddati)
+internal/server             daemon serve (scheduler + dashboard; telegram: TODO)
 internal/notify             interfaccia notifiche (log ora; Telegram: TODO)
 ```
 

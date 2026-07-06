@@ -1,0 +1,106 @@
+{{define "overview"}}
+<!DOCTYPE html>
+<html lang="en">
+{{template "head" .Title}}
+<body>
+{{template "nav" .Nav}}
+<main>
+	<section class="cards">
+		{{range .Accounts}}
+		<div class="card balance">
+			<div class="card-label">{{.Name}} <span class="muted mono">{{.IBANTail}}</span></div>
+			<div class="card-value">{{money .Amount}} <span class="cur">{{.Currency}}</span></div>
+		</div>
+		{{else}}
+		<div class="card"><div class="muted">No accounts yet — run a sync.</div></div>
+		{{end}}
+	</section>
+
+	<section class="cards">
+		<div class="card">
+			<div class="card-label">Income · {{.MonthLabel}}</div>
+			<div class="card-value pos">{{money .MonthIn}} <span class="cur">{{.Currency}}</span></div>
+		</div>
+		<div class="card">
+			<div class="card-label">Spending · {{.MonthLabel}}</div>
+			<div class="card-value neg">{{money .MonthOut}} <span class="cur">{{.Currency}}</span></div>
+		</div>
+	</section>
+
+	<section class="grid-2">
+		<div class="panel">
+			<h2>Cash flow (last 12 months)</h2>
+			<canvas id="monthlyChart" height="140"></canvas>
+		</div>
+		<div class="panel">
+			<h2>Spending by category · {{.MonthLabel}}</h2>
+			{{if .CategoryChart.Labels}}<canvas id="categoryChart" height="140"></canvas>
+			{{else}}<p class="muted">No spending this month.</p>{{end}}
+		</div>
+	</section>
+
+	<section class="panel">
+		<h2>Budgets · {{.MonthLabel}}</h2>
+		{{range .CategorySpend}}
+		<div class="budget-row">
+			<div class="budget-head">
+				<span class="chip" style="background:{{.Category.Color}}22;border-color:{{.Category.Color}}">{{.Category.Icon}} {{.Category.Name}}</span>
+				<span class="{{if .Over}}neg{{end}}">{{money .Spent}}{{if .HasBudget}} / {{money .Budget}}{{end}} {{$.Currency}}</span>
+			</div>
+			{{if .HasBudget}}
+			<div class="bar"><div class="bar-fill {{if .Over}}over{{end}}" style="width:{{.Pct}}%;background:{{.Category.Color}}"></div></div>
+			{{end}}
+		</div>
+		{{else}}
+		<p class="muted">No categorized spending this month.</p>
+		{{end}}
+	</section>
+
+	<section class="panel">
+		<h2>Recent transactions</h2>
+		<table class="tx-table">
+			<thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th></tr></thead>
+			<tbody>
+			{{range .Recent}}
+				<tr>
+					<td class="mono">{{.Tx.BookingDate}}</td>
+					<td>{{template "desc" .Tx}}</td>
+					<td><span class="chip" style="background:{{.Category.Color}}22;border-color:{{.Category.Color}}">{{.Category.Icon}} {{.Category.Name}}</span></td>
+					<td class="num {{if lt .Tx.Amount 0.0}}neg{{else}}pos{{end}}">{{money .Tx.Amount}} {{.Tx.Currency}}</td>
+				</tr>
+			{{else}}
+				<tr><td colspan="4" class="muted">No transactions yet.</td></tr>
+			{{end}}
+			</tbody>
+		</table>
+	</section>
+</main>
+
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+	const mc = {{json .MonthlyChart}};
+	const mel = document.getElementById('monthlyChart');
+	if (mel && mc.labels && mc.labels.length) {
+		new Chart(mel, {
+			type: 'bar',
+			data: { labels: mc.labels, datasets: [
+				{ label: 'Income', data: mc.in, backgroundColor: '#2e9e5b' },
+				{ label: 'Spending', data: mc.out, backgroundColor: '#e0524a' }
+			]},
+			options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+		});
+	}
+	const cc = {{json .CategoryChart}};
+	const cel = document.getElementById('categoryChart');
+	if (cel && cc.labels && cc.labels.length) {
+		new Chart(cel, {
+			type: 'doughnut',
+			data: { labels: cc.labels, datasets: [{ data: cc.values, backgroundColor: cc.colors }] },
+			options: { responsive: true, plugins: { legend: { position: 'right' } } }
+		});
+	}
+});
+</script>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,38 @@
+{{define "transactions"}}
+<!DOCTYPE html>
+<html lang="en">
+{{template "head" .Title}}
+<body>
+{{template "nav" .Nav}}
+<main>
+	<section class="panel">
+		<h2>Transactions</h2>
+		<form class="filters" hx-get="/transactions/rows" hx-target="#tx-results"
+		      hx-trigger="submit, change delay:200ms, keyup from:input[name=q] delay:400ms">
+			<label>Account
+				<select name="account">
+					<option value="">All</option>
+					{{range .Accounts}}<option value="{{.UID}}" {{if eq .UID $.Filter.AccountUID}}selected{{end}}>{{.Name}}</option>{{end}}
+				</select>
+			</label>
+			<label>From <input type="date" name="from" value="{{.Filter.DateFrom}}"></label>
+			<label>To <input type="date" name="to" value="{{.Filter.DateTo}}"></label>
+			<label>Direction
+				<select name="direction">
+					<option value="">Any</option>
+					<option value="DBIT" {{if eq .Filter.Direction "DBIT"}}selected{{end}}>Spending</option>
+					<option value="CRDT" {{if eq .Filter.Direction "CRDT"}}selected{{end}}>Income</option>
+				</select>
+			</label>
+			<label class="grow">Search <input type="search" name="q" value="{{.Filter.Text}}" placeholder="description, counterparty, reference"></label>
+			<button type="submit">Filter</button>
+		</form>
+
+		<div id="tx-results">
+			{{template "txresults" .Results}}
+		</div>
+	</section>
+</main>
+</body>
+</html>
+{{end}}

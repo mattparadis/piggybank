@@ -69,6 +69,20 @@ type Amount struct {
 	Amount   string `json:"amount"`
 }
 
+// Balance is an account balance (GET /accounts/{uid}/balances). An account may
+// expose several balance types (e.g. CLBD closing booked, XPCD expected).
+type Balance struct {
+	Name               string `json:"name"`
+	BalanceAmount      Amount `json:"balance_amount"`
+	BalanceType        string `json:"balance_type"`
+	ReferenceDate      string `json:"reference_date"`
+	LastChangeDateTime string `json:"last_change_date_time"`
+}
+
+type balancesResponse struct {
+	Balances []Balance `json:"balances"`
+}
+
 // Party è una controparte (creditor/debtor).
 type Party struct {
 	Name string `json:"name"`

@@ -105,6 +105,24 @@ no reindexing needed when you change the rules.
 
 To run only the dashboard (no sync): `expense_monitor dashboard --config config.yaml`.
 
+### Re-categorizing from the dashboard
+
+Categories default to the YAML keyword rules, but you can re-tag transactions from the UI
+without editing YAML — the changes are stored as data (SQLite), and the YAML rules stay the
+default. Resolution priority per transaction is: **manual override → learned rule → YAML
+rule → Uncategorized**.
+
+- On the **Transactions** list and the Overview **Recent** table, each row's category is a
+  dropdown. Pick a category to set a **manual override** for just that transaction; pick
+  **↺ Auto** to revert to the rules.
+- The **≡** button next to it opens "apply to all similar": it stores a **learned rule**
+  (keyword → category, case-insensitive substring) that re-tags all matching transactions,
+  now and in future syncs. The keyword is pre-filled from the transaction and editable.
+- Learned rules are listed under **Custom category rules** on the Overview, each with a
+  remove (✕) button.
+
+Overrides and learned rules also apply to the Telegram spending alerts and monthly report.
+
 > **Operational note:** the dashboard and the `auth` callback share port 7777. To
 > re-authorize when the session expires, stop the daemon first
 > (`docker compose stop`), run `auth`, then start it again.

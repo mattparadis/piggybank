@@ -15,8 +15,10 @@ type AccountRecord struct {
 }
 
 // TxRecord is a row of the transactions table. The caller (syncer) computes
-// DedupKey and Amount (signed).
+// DedupKey and Amount (signed). ID is the stable row id, populated by read
+// queries (zero when the record is built for insertion).
 type TxRecord struct {
+	ID                   int64
 	AccountUID           string
 	DedupKey             string
 	TransactionID        string

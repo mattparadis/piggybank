@@ -130,12 +130,7 @@ func (f TxFilter) whereClause() (string, []any) {
 // ListTransactions returns transactions matching the filter, newest first.
 func (s *Store) ListTransactions(f TxFilter) ([]TxRecord, error) {
 	where, args := f.whereClause()
-	q := `SELECT account_uid, COALESCE(transaction_id,''), amount, COALESCE(currency,''),
-	             COALESCE(credit_debit_indicator,''), COALESCE(status,''),
-	             COALESCE(booking_date,''), COALESCE(value_date,''), COALESCE(transaction_date,''),
-	             COALESCE(reference,''), COALESCE(remittance_information,''),
-	             COALESCE(creditor_name,''), COALESCE(debtor_name,'')
-	      FROM transactions` + where + ` ORDER BY booking_date DESC, id DESC`
+	q := txSelectColumns + ` FROM transactions` + where + ` ORDER BY booking_date DESC, id DESC`
 	if f.Limit > 0 {
 		q += " LIMIT ? OFFSET ?"
 		args = append(args, f.Limit, f.Offset)
@@ -149,16 +144,35 @@ func (s *Store) ListTransactions(f TxFilter) ([]TxRecord, error) {
 
 	var out []TxRecord
 	for rows.Next() {
-		var t TxRecord
-		if err := rows.Scan(
-			&t.AccountUID, &t.TransactionID, &t.Amount, &t.Currency, &t.CreditDebitIndicator,
-			&t.Status, &t.BookingDate, &t.ValueDate, &t.TransactionDate, &t.Reference,
-			&t.Remittance, &t.CreditorName, &t.DebtorName); err != nil {
+		t, err := scanTx(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// txSelectColumns is the shared column list for reading TxRecord rows.
+const txSelectColumns = `SELECT id, account_uid, COALESCE(transaction_id,''), amount, COALESCE(currency,''),
+	COALESCE(credit_debit_indicator,''), COALESCE(status,''),
+	COALESCE(booking_date,''), COALESCE(value_date,''), COALESCE(transaction_date,''),
+	COALESCE(reference,''), COALESCE(remittance_information,''),
+	COALESCE(creditor_name,''), COALESCE(debtor_name,'')`
+
+// scanTx scans one row selected via txSelectColumns.
+func scanTx(sc interface{ Scan(...any) error }) (TxRecord, error) {
+	var t TxRecord
+	err := sc.Scan(
+		&t.ID, &t.AccountUID, &t.TransactionID, &t.Amount, &t.Currency, &t.CreditDebitIndicator,
+		&t.Status, &t.BookingDate, &t.ValueDate, &t.TransactionDate, &t.Reference,
+		&t.Remittance, &t.CreditorName, &t.DebtorName)
+	return t, err
+}
+
+// GetTransaction returns a single transaction by its row id.
+func (s *Store) GetTransaction(id int64) (TxRecord, error) {
+	return scanTx(s.db.QueryRow(txSelectColumns+` FROM transactions WHERE id = ?`, id))
 }
 
 // GetKV returns the value for a key and whether it was present.
@@ -180,6 +194,81 @@ func (s *Store) SetKV(key, value string) error {
 		INSERT INTO kv (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
 	return err
+}
+
+// LearnedRuleRecord is a stored user-created category rule.
+type LearnedRuleRecord struct {
+	ID       int64
+	Keyword  string
+	Category string
+}
+
+// SetCategoryOverride assigns a manual category to a single transaction.
+func (s *Store) SetCategoryOverride(txID int64, category string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO category_overrides (tx_id, category_name) VALUES (?, ?)
+		ON CONFLICT(tx_id) DO UPDATE SET category_name=excluded.category_name`, txID, category)
+	return err
+}
+
+// DeleteCategoryOverride removes the manual category of a transaction (reverting
+// it to the rule-based categorization).
+func (s *Store) DeleteCategoryOverride(txID int64) error {
+	_, err := s.db.Exec(`DELETE FROM category_overrides WHERE tx_id = ?`, txID)
+	return err
+}
+
+// ListCategoryOverrides returns all manual overrides as tx id -> category name.
+func (s *Store) ListCategoryOverrides() (map[int64]string, error) {
+	rows, err := s.db.Query(`SELECT tx_id, category_name FROM category_overrides`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[int64]string)
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}
+
+// AddLearnedRule stores a keyword -> category rule.
+func (s *Store) AddLearnedRule(keyword, category string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO learned_rules (keyword, category_name, created_at) VALUES (?, ?, ?)`,
+		keyword, category, nowUTC())
+	return err
+}
+
+// DeleteLearnedRule removes a learned rule by id.
+func (s *Store) DeleteLearnedRule(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM learned_rules WHERE id = ?`, id)
+	return err
+}
+
+// ListLearnedRules returns learned rules, newest first.
+func (s *Store) ListLearnedRules() ([]LearnedRuleRecord, error) {
+	rows, err := s.db.Query(`SELECT id, keyword, category_name FROM learned_rules ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LearnedRuleRecord
+	for rows.Next() {
+		var r LearnedRuleRecord
+		if err := rows.Scan(&r.ID, &r.Keyword, &r.Category); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // ListMonth returns all transactions booked in the given month (YYYY-MM),

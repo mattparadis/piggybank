@@ -20,7 +20,7 @@ func TestSummarizeExcludesSavings(t *testing.T) {
 		{Amount: 200, Remittance: "SALARY"},             // income
 	}
 
-	sum := cat.Summarize(txs)
+	sum := cat.NewResolver(nil, nil).Summarize(txs)
 	if sum.Spent != 50 {
 		t.Errorf("Spent = %v, want 50", sum.Spent)
 	}

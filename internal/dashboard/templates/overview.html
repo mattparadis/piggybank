@@ -61,6 +61,22 @@
 	</section>
 
 	<section class="panel">
+		<h2>Custom category rules</h2>
+		{{if .LearnedRules}}
+		<ul class="rules-list">
+			{{range .LearnedRules}}
+			<li>
+				<span class="mono">“{{.Keyword}}”</span> → {{.Category}}
+				<button class="rule-del" type="button" hx-post="/rules/delete" hx-vals='{"id": "{{.ID}}"}' hx-swap="none" title="Remove rule">✕</button>
+			</li>
+			{{end}}
+		</ul>
+		{{else}}
+		<p class="muted">No custom rules yet. Change a transaction's category and use “≡ apply to all similar”.</p>
+		{{end}}
+	</section>
+
+	<section class="panel">
 		<h2>Recent transactions</h2>
 		<table class="tx-table">
 			<thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th></tr></thead>
@@ -69,7 +85,7 @@
 				<tr>
 					<td class="mono">{{.Tx.BookingDate}}</td>
 					<td class="desc-cell">{{template "desc" .Tx}}</td>
-					<td><span class="chip" style="background:{{.Category.Color}}22;border-color:{{.Category.Color}}">{{.Category.Icon}} {{.Category.Name}}</span></td>
+					<td class="cat-cell">{{template "catselect" (dict "TxID" .Tx.ID "Current" .Category "Categories" $.Categories)}}</td>
 					<td class="num {{if lt .Tx.Amount 0.0}}neg{{else}}pos{{end}}">{{money .Tx.Amount}} {{.Tx.Currency}}</td>
 				</tr>
 			{{else}}

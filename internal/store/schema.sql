@@ -55,3 +55,18 @@ CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Manual per-transaction category overrides set from the dashboard.
+CREATE TABLE IF NOT EXISTS category_overrides (
+    tx_id         INTEGER PRIMARY KEY,     -- transactions.id
+    category_name TEXT NOT NULL
+);
+
+-- Learned category rules created from the dashboard ("apply to all similar").
+-- keyword is a case-insensitive substring, matched like the YAML match_any rules.
+CREATE TABLE IF NOT EXISTS learned_rules (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    keyword       TEXT NOT NULL,
+    category_name TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);

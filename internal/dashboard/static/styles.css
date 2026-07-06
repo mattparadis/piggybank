@@ -126,3 +126,33 @@ main { max-width: 1080px; margin: 0 auto; padding: 24px; display: flex; flex-dir
 	line-height: 1;
 }
 .theme-toggle:hover { background: var(--bg); }
+
+/* Editable category cell */
+.cat-form { display: flex; align-items: center; gap: 6px; }
+.cat-select {
+	font: inherit;
+	font-size: 0.8rem;
+	max-width: 170px;
+	color: var(--ink);
+	cursor: pointer;
+	-webkit-appearance: none;
+	appearance: none;
+}
+.all-similar { text-decoration: none; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.all-similar:hover { color: var(--ink); }
+.rule-form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rule-form input, .rule-form select {
+	padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--input); color: var(--ink);
+}
+.rule-form button {
+	padding: 5px 10px; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+	border-radius: 8px; font-weight: 600; cursor: pointer;
+}
+
+.rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rules-list li { display: flex; align-items: center; gap: 8px; }
+.rule-del {
+	margin-left: auto; border: 1px solid var(--line); background: transparent; color: var(--muted);
+	border-radius: 6px; cursor: pointer; padding: 1px 7px; line-height: 1.3;
+}
+.rule-del:hover { color: var(--neg); border-color: var(--neg); }

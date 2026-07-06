@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"expense_monitor/internal/category"
@@ -50,6 +51,10 @@ func New(cfg *config.Config, st *store.Store, cat *category.Categorizer) (http.H
 	mux.HandleFunc("GET /{$}", s.handleOverview)
 	mux.HandleFunc("GET /transactions", s.handleTransactions)
 	mux.HandleFunc("GET /transactions/rows", s.handleTransactionRows)
+	mux.HandleFunc("POST /transactions/category", s.handleSetCategory)
+	mux.HandleFunc("GET /transactions/rule-form", s.handleRuleForm)
+	mux.HandleFunc("POST /rules", s.handleAddRule)
+	mux.HandleFunc("POST /rules/delete", s.handleDeleteRule)
 
 	static, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -130,6 +135,8 @@ type overviewVM struct {
 	Recent        []txVM
 	MonthlyChart  monthlyChart
 	CategoryChart catChart
+	Categories    []category.Category
+	LearnedRules  []store.LearnedRuleRecord
 }
 
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +146,17 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	to := now.Format("2006-01-02")
 
 	vm := overviewVM{Title: "Overview", Nav: "overview", MonthLabel: monthStart.Format("January 2006")}
+	vm.Categories = s.cat.Categories()
+
+	res, err := s.resolver()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if vm.LearnedRules, err = s.st.ListLearnedRules(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	// Balances per account.
 	accounts, err := s.st.ListAccounts()
@@ -172,7 +190,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	// Savings-aware totals: spending excludes savings categories, which are
 	// reported separately as MonthSaved.
-	sum := s.cat.Summarize(monthTx)
+	sum := res.Summarize(monthTx)
 	vm.MonthIn = sum.Income
 	vm.MonthOut = sum.Spent
 	vm.MonthSaved = sum.Saved
@@ -216,7 +234,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, t := range recent {
-		vm.Recent = append(vm.Recent, txVM{Tx: t, Category: s.categorize(t)})
+		vm.Recent = append(vm.Recent, txVM{Tx: t, Category: res.Resolve(t)})
 	}
 
 	s.render(w, "overview", vm)
@@ -234,6 +252,7 @@ type txListVM struct {
 
 type txResultsVM struct {
 	Rows       []txVM
+	Categories []category.Category
 	Total      int
 	Page       int
 	Pages      int
@@ -295,8 +314,13 @@ func (s *Server) buildResults(filter store.TxFilter, page int, r *http.Request) 
 	if err != nil {
 		return txResultsVM{}, err
 	}
+	resolver, err := s.resolver()
+	if err != nil {
+		return txResultsVM{}, err
+	}
 	res := txResultsVM{
 		Total:      total,
+		Categories: s.cat.Categories(),
 		Page:       page,
 		Pages:      pages,
 		HasPrev:    page > 1,
@@ -305,7 +329,7 @@ func (s *Server) buildResults(filter store.TxFilter, page int, r *http.Request) 
 		RangeEnd:   min(total, filter.Offset+len(rows)),
 	}
 	for _, t := range rows {
-		res.Rows = append(res.Rows, txVM{Tx: t, Category: s.categorize(t)})
+		res.Rows = append(res.Rows, txVM{Tx: t, Category: resolver.Resolve(t)})
 	}
 	base := filterQuery(r)
 	res.PrevQuery = template.URL(withPage(base, page-1))
@@ -313,11 +337,113 @@ func (s *Server) buildResults(filter store.TxFilter, page int, r *http.Request) 
 	return res, nil
 }
 
-// ---- helpers ----
+// ---- category editing ----
 
-func (s *Server) categorize(t store.TxRecord) category.Category {
-	return s.cat.Categorize(t.Remittance, t.CreditorName, t.DebtorName, t.Reference)
+// resolver builds a per-request Resolver from the stored overrides and learned
+// rules layered on top of the configured (YAML) categorizer.
+func (s *Server) resolver() (*category.Resolver, error) {
+	overrides, err := s.st.ListCategoryOverrides()
+	if err != nil {
+		return nil, err
+	}
+	rules, err := s.st.ListLearnedRules()
+	if err != nil {
+		return nil, err
+	}
+	learned := make([]category.LearnedRule, len(rules))
+	for i, r := range rules {
+		learned[i] = category.LearnedRule{Keyword: r.Keyword, Category: r.Category}
+	}
+	return s.cat.NewResolver(overrides, learned), nil
 }
+
+// handleSetCategory sets or clears a manual category override for one transaction.
+func (s *Server) handleSetCategory(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	cat := r.FormValue("category")
+	var err error
+	if cat == "__auto__" {
+		err = s.st.DeleteCategoryOverride(id)
+	} else {
+		err = s.st.SetCategoryOverride(id, cat)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRuleForm returns the inline "apply to all similar" form, with a keyword
+// pre-filled from the transaction.
+func (s *Server) handleRuleForm(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	tx, err := s.st.GetTransaction(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.render(w, "rule-form", map[string]any{
+		"Keyword":    guessMerchant(tx),
+		"Categories": s.cat.Categories(),
+	})
+}
+
+// handleAddRule stores a learned keyword -> category rule.
+func (s *Server) handleAddRule(w http.ResponseWriter, r *http.Request) {
+	keyword := strings.TrimSpace(r.FormValue("keyword"))
+	cat := r.FormValue("category")
+	if keyword != "" && cat != "" {
+		if err := s.st.AddLearnedRule(keyword, cat); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteRule removes a learned rule.
+func (s *Server) handleDeleteRule(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if err := s.st.DeleteLearnedRule(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// guessMerchant returns a best-effort keyword for a new learned rule.
+func guessMerchant(tx store.TxRecord) string {
+	if tx.CreditorName != "" {
+		return tx.CreditorName
+	}
+	if tx.DebtorName != "" {
+		return tx.DebtorName
+	}
+	rem := tx.Remittance
+	if i := strings.Index(strings.ToUpper(rem), "C/O "); i >= 0 {
+		if tail := strings.TrimSpace(rem[i+4:]); tail != "" {
+			return firstWords(tail, 3)
+		}
+	}
+	if rem != "" {
+		return firstWords(rem, 3)
+	}
+	return tx.Reference
+}
+
+func firstWords(s string, n int) string {
+	f := strings.Fields(s)
+	if len(f) > n {
+		f = f[:n]
+	}
+	return strings.Join(f, " ")
+}
+
+// ---- helpers ----
 
 func parseFilter(r *http.Request) (store.TxFilter, int) {
 	q := r.URL.Query()
@@ -410,6 +536,15 @@ func funcMap() template.FuncMap {
 				return template.JS("null")
 			}
 			return template.JS(b)
+		},
+		"dict": func(pairs ...any) map[string]any {
+			m := make(map[string]any, len(pairs)/2)
+			for i := 0; i+1 < len(pairs); i += 2 {
+				if key, ok := pairs[i].(string); ok {
+					m[key] = pairs[i+1]
+				}
+			}
+			return m
 		},
 	}
 }

@@ -97,7 +97,7 @@ func (m *Monitor) checkSpending(ctx context.Context, now time.Time) {
 		log.Printf("[telegram] spending check: %v", err)
 		return
 	}
-	spend := m.cat.Summarize(txs).Spent
+	spend := m.resolver().Summarize(txs).Spent
 	idx := levelIndex(spend, sa.Threshold, sa.Step)
 
 	storedMonth, _, err := m.st.GetKV(kvSpendMonth)
@@ -154,7 +154,7 @@ func (m *Monitor) sendMonthlyReport(ctx context.Context, month string) {
 		log.Printf("[telegram] monthly report: %v", err)
 		return
 	}
-	sum := m.cat.Summarize(txs)
+	sum := m.resolver().Summarize(txs)
 	text := formatReport(month, sum)
 
 	if m.cfg.MonthlyReport.WithChart && len(sum.Categories) > 0 {
@@ -195,6 +195,18 @@ func (m *Monitor) readInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+// resolver builds a category resolver from the stored manual overrides and
+// learned rules, so alerts and reports honor dashboard edits.
+func (m *Monitor) resolver() *category.Resolver {
+	overrides, _ := m.st.ListCategoryOverrides()
+	rules, _ := m.st.ListLearnedRules()
+	learned := make([]category.LearnedRule, len(rules))
+	for i, r := range rules {
+		learned[i] = category.LearnedRule{Keyword: r.Keyword, Category: r.Category}
+	}
+	return m.cat.NewResolver(overrides, learned)
 }
 
 // levelIndex returns -1 when spend is below threshold, else the number of full
@@ -294,7 +306,7 @@ func (m *Monitor) reportSpendingNow(ctx context.Context) {
 		m.send(ctx, "Could not read the data.")
 		return
 	}
-	sum := m.cat.Summarize(txs)
+	sum := m.resolver().Summarize(txs)
 	msg := fmt.Sprintf("📅 %s so far\nSpent:  %.2f\nSaved:  %.2f\nIncome: %.2f", month, sum.Spent, sum.Saved, sum.Income)
 	if m.cfg.SpendingAlert.Enabled {
 		msg += fmt.Sprintf("\nThreshold: %.2f (+%.2f steps)", m.cfg.SpendingAlert.Threshold, m.cfg.SpendingAlert.Step)

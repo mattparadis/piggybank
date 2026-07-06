@@ -39,7 +39,7 @@
 		<tr>
 			<td class="mono">{{.Tx.BookingDate}}</td>
 			<td class="desc-cell">{{template "desc" .Tx}}</td>
-			<td><span class="chip" style="background:{{.Category.Color}}22;border-color:{{.Category.Color}}">{{.Category.Icon}} {{.Category.Name}}</span></td>
+			<td class="cat-cell">{{template "catselect" (dict "TxID" .Tx.ID "Current" .Category "Categories" $.Categories)}}</td>
 			<td class="mono muted">{{.Tx.AccountUID}}</td>
 			<td class="num {{if lt .Tx.Amount 0.0}}neg{{else}}pos{{end}}">{{money .Tx.Amount}} {{.Tx.Currency}}</td>
 		</tr>
@@ -57,4 +57,28 @@
 
 {{define "desc"}}
 	{{if .Remittance}}{{.Remittance}}{{else if .CreditorName}}{{.CreditorName}}{{else if .DebtorName}}{{.DebtorName}}{{else if .Reference}}{{.Reference}}{{else}}—{{end}}
+{{end}}
+
+{{/* catselect renders an editable category chip. Data: {TxID, Current, Categories} */}}
+{{define "catselect"}}
+<form class="cat-form" hx-post="/transactions/category" hx-swap="none">
+	<input type="hidden" name="id" value="{{.TxID}}">
+	<select name="category" class="cat-select chip" style="background:{{.Current.Color}}22;border-color:{{.Current.Color}}" onchange="this.form.requestSubmit()">
+		{{range .Categories}}<option value="{{.Name}}" {{if eq .Name $.Current.Name}}selected{{end}}>{{.Icon}} {{.Name}}</option>{{end}}
+		<option value="Uncategorized" {{if eq $.Current.Name "Uncategorized"}}selected{{end}}>❓ Uncategorized</option>
+		<option value="__auto__">↺ Auto</option>
+	</select>
+	<a class="all-similar" href="#" hx-get="/transactions/rule-form?id={{.TxID}}" hx-target="closest .cat-cell" hx-swap="beforeend" title="Apply to all similar transactions">≡</a>
+</form>
+{{end}}
+
+{{/* rule-form is the inline "apply to all similar" editor. Data: {Keyword, Categories} */}}
+{{define "rule-form"}}
+<form class="rule-form" hx-post="/rules" hx-swap="none">
+	<input type="text" name="keyword" value="{{.Keyword}}" placeholder="keyword" required>
+	<select name="category">
+		{{range .Categories}}<option value="{{.Name}}">{{.Icon}} {{.Name}}</option>{{end}}
+	</select>
+	<button type="submit">Apply to all similar</button>
+</form>
 {{end}}

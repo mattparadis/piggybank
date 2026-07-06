@@ -132,13 +132,16 @@ main { max-width: 1080px; margin: 0 auto; padding: 24px; display: flex; flex-dir
 .cat-select {
 	font: inherit;
 	font-size: 0.8rem;
-	max-width: 170px;
+	max-width: 16rem;
 	color: var(--ink);
 	cursor: pointer;
 	-webkit-appearance: none;
 	appearance: none;
 }
-.all-similar { text-decoration: none; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.all-similar {
+	border: none; background: transparent; padding: 0; font: inherit;
+	text-decoration: none; color: var(--muted); font-size: 0.9rem; cursor: pointer;
+}
 .all-similar:hover { color: var(--ink); }
 .rule-form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .rule-form input, .rule-form select {
@@ -148,6 +151,10 @@ main { max-width: 1080px; margin: 0 auto; padding: 24px; display: flex; flex-dir
 	padding: 5px 10px; border: 1px solid var(--accent); background: var(--accent); color: #fff;
 	border-radius: 8px; font-weight: 600; cursor: pointer;
 }
+.rule-form .rule-cancel {
+	border-color: var(--line); background: transparent; color: var(--muted); font-weight: 400;
+}
+.rule-form .rule-cancel:hover { color: var(--neg); border-color: var(--neg); }
 
 .rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .rules-list li { display: flex; align-items: center; gap: 8px; }
@@ -156,3 +163,15 @@ main { max-width: 1080px; margin: 0 auto; padding: 24px; display: flex; flex-dir
 	border-radius: 6px; cursor: pointer; padding: 1px 7px; line-height: 1.3;
 }
 .rule-del:hover { color: var(--neg); border-color: var(--neg); }
+
+/* Toast feedback (filled by app.js on htmx events) */
+#toast {
+	position: fixed; bottom: 16px; right: 16px; z-index: 100;
+	max-width: 340px; padding: 10px 14px;
+	background: var(--panel); color: var(--ink);
+	border: 1px solid var(--line); border-left: 3px solid var(--accent);
+	border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+	font-size: 0.85rem;
+}
+#toast.ok { border-left-color: var(--pos); }
+#toast.err { border-left-color: var(--neg); }

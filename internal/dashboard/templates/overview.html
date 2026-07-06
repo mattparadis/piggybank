@@ -4,6 +4,7 @@
 {{template "head" .Title}}
 <body>
 {{template "nav" .Nav}}
+{{template "toast"}}
 <main>
 	<section class="cards">
 		{{range .Accounts}}
@@ -62,18 +63,7 @@
 
 	<section class="panel">
 		<h2>Custom category rules</h2>
-		{{if .LearnedRules}}
-		<ul class="rules-list">
-			{{range .LearnedRules}}
-			<li>
-				<span class="mono">“{{.Keyword}}”</span> → {{.Category}}
-				<button class="rule-del" type="button" hx-post="/rules/delete" hx-vals='{"id": "{{.ID}}"}' hx-swap="none" title="Remove rule">✕</button>
-			</li>
-			{{end}}
-		</ul>
-		{{else}}
-		<p class="muted">No custom rules yet. Change a transaction's category and use “≡ apply to all similar”.</p>
-		{{end}}
+		{{template "rules-list" .LearnedRules}}
 	</section>
 
 	<section class="panel">

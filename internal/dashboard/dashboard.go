@@ -53,6 +53,7 @@ func New(cfg *config.Config, st *store.Store, cat *category.Categorizer) (http.H
 	mux.HandleFunc("GET /transactions/rows", s.handleTransactionRows)
 	mux.HandleFunc("POST /transactions/category", s.handleSetCategory)
 	mux.HandleFunc("GET /transactions/rule-form", s.handleRuleForm)
+	mux.HandleFunc("GET /rules", s.handleRulesList)
 	mux.HandleFunc("POST /rules", s.handleAddRule)
 	mux.HandleFunc("POST /rules/delete", s.handleDeleteRule)
 
@@ -292,6 +293,17 @@ func (s *Server) handleTransactionRows(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Keep the address bar on the full-page equivalent of this partial, so a
+	// reload or shared link reproduces the current filters and page.
+	q := filterQuery(r)
+	if results.Page > 1 {
+		q.Set("page", strconv.Itoa(results.Page))
+	}
+	target := "/transactions"
+	if enc := q.Encode(); enc != "" {
+		target += "?" + enc
+	}
+	w.Header().Set("HX-Replace-Url", target)
 	s.render(w, "txresults", results)
 }
 
@@ -357,13 +369,40 @@ func (s *Server) resolver() (*category.Resolver, error) {
 	return s.cat.NewResolver(overrides, learned), nil
 }
 
-// handleSetCategory sets or clears a manual category override for one transaction.
+// renderCatselect re-renders one transaction's category cell from the current
+// overrides and rules, so the chip reflects the freshly resolved category.
+func (s *Server) renderCatselect(w http.ResponseWriter, tx store.TxRecord) {
+	res, err := s.resolver()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.render(w, "catselect", map[string]any{
+		"TxID":       tx.ID,
+		"Current":    res.Resolve(tx),
+		"Categories": s.cat.Categories(),
+	})
+}
+
+// handleSetCategory sets or clears a manual category override for one
+// transaction and responds with the re-rendered category cell.
 func (s *Server) handleSetCategory(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	id, err := parseID(r.FormValue("id"))
+	if err != nil {
+		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		return
+	}
+	tx, err := s.st.GetTransaction(id)
+	if err != nil {
+		http.Error(w, "transaction not found", http.StatusNotFound)
+		return
+	}
 	cat := r.FormValue("category")
-	var err error
 	if cat == "__auto__" {
 		err = s.st.DeleteCategoryOverride(id)
+	} else if !s.validCategory(cat) {
+		http.Error(w, "unknown category: "+cat, http.StatusBadRequest)
+		return
 	} else {
 		err = s.st.SetCategoryOverride(id, cat)
 	}
@@ -371,48 +410,84 @@ func (s *Server) handleSetCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("HX-Refresh", "true")
-	w.WriteHeader(http.StatusNoContent)
+	s.renderCatselect(w, tx)
 }
 
 // handleRuleForm returns the inline "apply to all similar" form, with a keyword
 // pre-filled from the transaction.
 func (s *Server) handleRuleForm(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	id, err := parseID(r.URL.Query().Get("id"))
+	if err != nil {
+		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		return
+	}
 	tx, err := s.st.GetTransaction(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "transaction not found", http.StatusNotFound)
 		return
 	}
 	s.render(w, "rule-form", map[string]any{
+		"TxID":       id,
 		"Keyword":    guessMerchant(tx),
 		"Categories": s.cat.Categories(),
 	})
 }
 
-// handleAddRule stores a learned keyword -> category rule.
+// handleAddRule stores a learned keyword -> category rule and responds with the
+// re-rendered category cell of the transaction the rule was created from.
 func (s *Server) handleAddRule(w http.ResponseWriter, r *http.Request) {
-	keyword := strings.TrimSpace(r.FormValue("keyword"))
-	cat := r.FormValue("category")
-	if keyword != "" && cat != "" {
-		if err := s.st.AddLearnedRule(keyword, cat); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	id, err := parseID(r.FormValue("id"))
+	if err != nil {
+		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		return
 	}
-	w.Header().Set("HX-Refresh", "true")
-	w.WriteHeader(http.StatusNoContent)
+	tx, err := s.st.GetTransaction(id)
+	if err != nil {
+		http.Error(w, "transaction not found", http.StatusNotFound)
+		return
+	}
+	keyword := strings.TrimSpace(r.FormValue("keyword"))
+	if keyword == "" {
+		http.Error(w, "keyword required", http.StatusBadRequest)
+		return
+	}
+	cat := r.FormValue("category")
+	if !s.validCategory(cat) {
+		http.Error(w, "unknown category: "+cat, http.StatusBadRequest)
+		return
+	}
+	if err := s.st.AddLearnedRule(keyword, cat); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	hxTrigger(w, "Rule added", "ok", "rules-changed")
+	s.renderCatselect(w, tx)
 }
 
-// handleDeleteRule removes a learned rule.
+// handleDeleteRule removes a learned rule and responds with the re-rendered
+// rules panel.
 func (s *Server) handleDeleteRule(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	id, err := parseID(r.FormValue("id"))
+	if err != nil {
+		http.Error(w, "invalid rule id", http.StatusBadRequest)
+		return
+	}
 	if err := s.st.DeleteLearnedRule(id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("HX-Refresh", "true")
-	w.WriteHeader(http.StatusNoContent)
+	hxTrigger(w, "Rule deleted", "ok")
+	s.handleRulesList(w, r)
+}
+
+// handleRulesList renders the learned-rules panel partial.
+func (s *Server) handleRulesList(w http.ResponseWriter, r *http.Request) {
+	rules, err := s.st.ListLearnedRules()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.render(w, "rules-list", rules)
 }
 
 // guessMerchant returns a best-effort keyword for a new learned rule.
@@ -444,6 +519,40 @@ func firstWords(s string, n int) string {
 }
 
 // ---- helpers ----
+
+// parseID parses a positive decimal id from a form/query value.
+func parseID(v string) (int64, error) {
+	id, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("invalid id %q", v)
+	}
+	return id, nil
+}
+
+// validCategory reports whether name is a configured category or Uncategorized.
+func (s *Server) validCategory(name string) bool {
+	if name == category.Uncategorized.Name {
+		return true
+	}
+	for _, c := range s.cat.Categories() {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// hxTrigger sets the HX-Trigger header so htmx fires a toast event (picked up
+// by app.js) plus any extra bare events on the client.
+func hxTrigger(w http.ResponseWriter, message, kind string, extra ...string) {
+	events := map[string]any{"toast": map[string]string{"message": message, "kind": kind}}
+	for _, e := range extra {
+		events[e] = true
+	}
+	if b, err := json.Marshal(events); err == nil {
+		w.Header().Set("HX-Trigger", string(b))
+	}
+}
 
 func parseFilter(r *http.Request) (store.TxFilter, int) {
 	q := r.URL.Query()

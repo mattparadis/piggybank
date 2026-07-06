@@ -59,26 +59,55 @@
 	{{if .Remittance}}{{.Remittance}}{{else if .CreditorName}}{{.CreditorName}}{{else if .DebtorName}}{{.DebtorName}}{{else if .Reference}}{{.Reference}}{{else}}—{{end}}
 {{end}}
 
-{{/* catselect renders an editable category chip. Data: {TxID, Current, Categories} */}}
+{{/* catselect renders an editable category chip. It is the full content of a
+     td.cat-cell: mutations respond with a fresh catselect swapped over the cell,
+     so chip color/icon stay correct and any open rule form closes. Data: {TxID, Current, Categories} */}}
 {{define "catselect"}}
-<form class="cat-form" hx-post="/transactions/category" hx-swap="none">
+<form class="cat-form" hx-post="/transactions/category" hx-target="closest .cat-cell" hx-swap="innerHTML">
 	<input type="hidden" name="id" value="{{.TxID}}">
 	<select name="category" class="cat-select chip" style="background:{{.Current.Color}}22;border-color:{{.Current.Color}}" onchange="this.form.requestSubmit()">
 		{{range .Categories}}<option value="{{.Name}}" {{if eq .Name $.Current.Name}}selected{{end}}>{{.Icon}} {{.Name}}</option>{{end}}
 		<option value="Uncategorized" {{if eq $.Current.Name "Uncategorized"}}selected{{end}}>❓ Uncategorized</option>
 		<option value="__auto__">↺ Auto</option>
 	</select>
-	<a class="all-similar" href="#" hx-get="/transactions/rule-form?id={{.TxID}}" hx-target="closest .cat-cell" hx-swap="beforeend" title="Apply to all similar transactions">≡</a>
+	<button type="button" class="all-similar" hx-get="/transactions/rule-form?id={{.TxID}}" hx-target="next .rule-slot" hx-swap="innerHTML" hx-trigger="click[toggleRuleSlot(this)]" title="Apply to all similar transactions">≡</button>
 </form>
+<span class="rule-slot"></span>
 {{end}}
 
-{{/* rule-form is the inline "apply to all similar" editor. Data: {Keyword, Categories} */}}
+{{/* rule-form is the inline "apply to all similar" editor. Data: {TxID, Keyword, Categories} */}}
 {{define "rule-form"}}
-<form class="rule-form" hx-post="/rules" hx-swap="none">
+<form class="rule-form" hx-post="/rules" hx-target="closest .cat-cell" hx-swap="innerHTML">
+	<input type="hidden" name="id" value="{{.TxID}}">
 	<input type="text" name="keyword" value="{{.Keyword}}" placeholder="keyword" required>
 	<select name="category">
 		{{range .Categories}}<option value="{{.Name}}">{{.Icon}} {{.Name}}</option>{{end}}
 	</select>
 	<button type="submit">Apply to all similar</button>
+	<button type="button" class="rule-cancel" title="Cancel" onclick="this.closest('.rule-slot').innerHTML=''">✕</button>
 </form>
+{{end}}
+
+{{/* toast is the global feedback element; app.js fills it on htmx events. */}}
+{{define "toast"}}
+<div id="toast" role="status" aria-live="polite" hidden></div>
+{{end}}
+
+{{/* rules-list shows the learned rules with delete buttons; it refetches itself
+     when a rule is added elsewhere on the page. Data: []store.LearnedRuleRecord */}}
+{{define "rules-list"}}
+<div id="rules-panel" hx-get="/rules" hx-trigger="rules-changed from:body" hx-swap="outerHTML">
+	{{if .}}
+	<ul class="rules-list">
+		{{range .}}
+		<li>
+			<span class="mono">“{{.Keyword}}”</span> → {{.Category}}
+			<button class="rule-del" type="button" hx-post="/rules/delete" hx-vals='{"id": "{{.ID}}"}' hx-confirm="Delete rule “{{.Keyword}}”?" hx-target="#rules-panel" hx-swap="outerHTML" title="Remove rule">✕</button>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<p class="muted">No custom rules yet. Change a transaction's category and use “≡ apply to all similar”.</p>
+	{{end}}
+</div>
 {{end}}

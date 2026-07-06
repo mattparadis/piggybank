@@ -149,6 +149,16 @@ Notification types:
 - **Monthly report** — at the start of each new month, a summary of the month that just
   ended (spent / saved / income / top categories), optionally with a bar-chart image.
 
+The `serve` daemon also listens for commands sent in the chat (only from the configured
+`chat_id`), shown in the bot's command menu:
+
+- `/report [YYYY-MM]` — send the monthly report now (default: current month).
+- `/spending` — current month's spending / saved / income so far.
+- `/help` — list the commands.
+
+The same report can be triggered without Telegram via the CLI:
+`expense_monitor report --config config.yaml [--month YYYY-MM]`.
+
 ## Inspecting the data
 
 ```sh

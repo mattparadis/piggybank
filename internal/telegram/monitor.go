@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"expense_monitor/internal/category"
@@ -31,6 +32,7 @@ type sender interface {
 type Monitor struct {
 	cfg    config.TelegramConfig
 	client sender
+	bot    *Client // concrete client for polling; nil in tests
 	st     *store.Store
 	cat    *category.Categorizer
 	now    func() time.Time
@@ -38,9 +40,11 @@ type Monitor struct {
 
 // NewMonitor builds a Monitor backed by a real Telegram client.
 func NewMonitor(cfg config.TelegramConfig, st *store.Store, cat *category.Categorizer) *Monitor {
+	c := NewClient(cfg.BotToken, cfg.ChatID)
 	return &Monitor{
 		cfg:    cfg,
-		client: NewClient(cfg.BotToken, cfg.ChatID),
+		client: c,
+		bot:    c,
 		st:     st,
 		cat:    cat,
 		now:    time.Now,
@@ -137,6 +141,13 @@ func (m *Monitor) maybeMonthlyReport(ctx context.Context, now time.Time) {
 	_ = m.st.SetKV(kvReportMonth, month)
 }
 
+// SendReport builds and sends the monthly report for the given month (YYYY-MM)
+// immediately, bypassing the month-rollover gate. Intended for manual testing
+// and re-sends via the `report` command.
+func (m *Monitor) SendReport(ctx context.Context, month string) {
+	m.sendMonthlyReport(ctx, month)
+}
+
 func (m *Monitor) sendMonthlyReport(ctx context.Context, month string) {
 	txs, err := m.st.ListMonth(month)
 	if err != nil {
@@ -193,4 +204,100 @@ func levelIndex(spend, threshold, step float64) int {
 		return -1
 	}
 	return int((spend - threshold) / step)
+}
+
+// botCommands are advertised in the Telegram command menu.
+var botCommands = []BotCommand{
+	{Command: "report", Description: "Send the monthly spending report [YYYY-MM]"},
+	{Command: "spending", Description: "Show current monthly spending"},
+	{Command: "help", Description: "List available commands"},
+}
+
+// Listen long-polls the Bot API and handles incoming commands until ctx is
+// canceled. It only acts on messages from the configured chat. A no-op when the
+// monitor has no concrete client (tests).
+func (m *Monitor) Listen(ctx context.Context) {
+	if m.bot == nil {
+		return
+	}
+	if err := m.bot.SetMyCommands(ctx, botCommands); err != nil {
+		log.Printf("[telegram] setMyCommands: %v", err)
+	}
+	offset := 0
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		updates, err := m.bot.GetUpdates(ctx, offset, 30)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Printf("[telegram] getUpdates: %v", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+			continue
+		}
+		for _, u := range updates {
+			offset = u.UpdateID + 1
+			m.handleUpdate(ctx, u)
+		}
+	}
+}
+
+// handleUpdate dispatches a single command message from the configured chat.
+func (m *Monitor) handleUpdate(ctx context.Context, u Update) {
+	if u.Message == nil {
+		return
+	}
+	// Only respond to the configured chat.
+	if strconv.FormatInt(u.Message.Chat.ID, 10) != m.cfg.ChatID {
+		return
+	}
+	fields := strings.Fields(u.Message.Text)
+	if len(fields) == 0 || !strings.HasPrefix(fields[0], "/") {
+		return
+	}
+	cmd := strings.ToLower(fields[0])
+	if i := strings.IndexByte(cmd, '@'); i >= 0 { // strip /report@BotName
+		cmd = cmd[:i]
+	}
+
+	switch cmd {
+	case "/report":
+		month := ""
+		if len(fields) > 1 {
+			month = fields[1]
+		}
+		if month == "" {
+			month = m.now().Format("2006-01")
+		}
+		m.sendMonthlyReport(ctx, month)
+	case "/spending":
+		m.reportSpendingNow(ctx)
+	case "/help", "/start":
+		m.send(ctx, "Commands:\n/report [YYYY-MM] — monthly spending report\n/spending — current monthly spending\n/help — this message")
+	default:
+		m.send(ctx, "Unknown command. Try /help")
+	}
+}
+
+// reportSpendingNow replies with the current month's spending summary.
+func (m *Monitor) reportSpendingNow(ctx context.Context) {
+	month := m.now().Format("2006-01")
+	txs, err := m.st.ListMonth(month)
+	if err != nil {
+		log.Printf("[telegram] spending query: %v", err)
+		m.send(ctx, "Could not read the data.")
+		return
+	}
+	sum := m.cat.Summarize(txs)
+	msg := fmt.Sprintf("📅 %s so far\nSpent:  %.2f\nSaved:  %.2f\nIncome: %.2f", month, sum.Spent, sum.Saved, sum.Income)
+	if m.cfg.SpendingAlert.Enabled {
+		msg += fmt.Sprintf("\nThreshold: %.2f (+%.2f steps)", m.cfg.SpendingAlert.Threshold, m.cfg.SpendingAlert.Step)
+	}
+	m.send(ctx, msg)
 }

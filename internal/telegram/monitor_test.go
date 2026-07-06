@@ -2,6 +2,8 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +13,16 @@ import (
 	"expense_monitor/internal/config"
 	"expense_monitor/internal/store"
 )
+
+func mkUpdate(t *testing.T, chatID int64, text string) Update {
+	t.Helper()
+	raw := fmt.Sprintf(`{"update_id":1,"message":{"message_id":1,"text":%q,"chat":{"id":%d}}}`, text, chatID)
+	var u Update
+	if err := json.Unmarshal([]byte(raw), &u); err != nil {
+		t.Fatalf("unmarshal update: %v", err)
+	}
+	return u
+}
 
 // fakeSender records messages/photos instead of hitting the Bot API.
 type fakeSender struct {
@@ -149,5 +161,47 @@ func TestMaybeMonthlyReport(t *testing.T) {
 	}
 	if !strings.Contains(fs.msgs[0], "2026-07") {
 		t.Errorf("report should cover July, got %q", fs.msgs[0])
+	}
+}
+
+func TestHandleUpdateCommands(t *testing.T) {
+	cfg := config.TelegramConfig{
+		ChatID:        "12345",
+		SpendingAlert: config.SpendingAlertConfig{Enabled: true, Threshold: 200, Step: 30},
+		MonthlyReport: config.MonthlyReportConfig{Enabled: true},
+	}
+	m, fs, st := newTestMonitor(t, cfg, nil)
+	m.now = func() time.Time { return time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC) }
+	addTx(t, st, "t1", -50, "2026-07-10", "shop")
+	ctx := context.Background()
+
+	// Message from a different chat is ignored.
+	m.handleUpdate(ctx, mkUpdate(t, 99999, "/help"))
+	if len(fs.msgs) != 0 {
+		t.Fatalf("message from wrong chat should be ignored, got %v", fs.msgs)
+	}
+
+	// /help lists commands.
+	m.handleUpdate(ctx, mkUpdate(t, 12345, "/help"))
+	if len(fs.msgs) != 1 || !strings.Contains(fs.msgs[0], "/report") {
+		t.Fatalf("help failed: %v", fs.msgs)
+	}
+
+	// /spending shows the current month.
+	m.handleUpdate(ctx, mkUpdate(t, 12345, "/spending"))
+	if len(fs.msgs) != 2 || !strings.Contains(fs.msgs[1], "2026-07") {
+		t.Fatalf("spending failed: %v", fs.msgs)
+	}
+
+	// /report sends the report (no chart -> text message).
+	m.handleUpdate(ctx, mkUpdate(t, 12345, "/report"))
+	if len(fs.msgs) != 3 || !strings.Contains(fs.msgs[2], "Monthly report") {
+		t.Fatalf("report failed: %v", fs.msgs)
+	}
+
+	// /report@BotName with an explicit month is accepted.
+	m.handleUpdate(ctx, mkUpdate(t, 12345, "/report@MyBot 2026-07"))
+	if len(fs.msgs) != 4 {
+		t.Fatalf("report@bot with arg failed: %v", fs.msgs)
 	}
 }

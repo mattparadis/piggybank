@@ -53,6 +53,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		cat := category.Build(cfg.Dashboard.Categories, cfg.Dashboard.Budgets)
 		mon = telegram.NewMonitor(cfg.Telegram, st, cat)
 		mon.StartupPing(ctx)
+		// Listen for bot commands (/report, /spending, /help) in the background.
+		go mon.Listen(ctx)
 	}
 
 	n.Info(fmt.Sprintf("daemon started, syncing every %s", interval))

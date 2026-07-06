@@ -13,12 +13,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"expense_monitor/internal/auth"
+	"expense_monitor/internal/category"
 	"expense_monitor/internal/config"
 	"expense_monitor/internal/enablebanking"
 	"expense_monitor/internal/server"
+	"expense_monitor/internal/store"
 	"expense_monitor/internal/syncer"
+	"expense_monitor/internal/telegram"
 )
 
 func main() {
@@ -33,7 +37,7 @@ func main() {
 		usage()
 		return
 	}
-	if cmd != "auth" && cmd != "serve" && cmd != "sync-once" && cmd != "aspsps" && cmd != "dashboard" {
+	if cmd != "auth" && cmd != "serve" && cmd != "sync-once" && cmd != "aspsps" && cmd != "dashboard" && cmd != "report" {
 		fmt.Fprintf(os.Stderr, "unknown command: %q\n\n", cmd)
 		usage()
 		os.Exit(2)
@@ -41,6 +45,7 @@ func main() {
 
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	cfgPath := fs.String("config", "config.yaml", "path to the YAML configuration file")
+	month := fs.String("month", "", "month YYYY-MM for the `report` command (default: current month)")
 	_ = fs.Parse(os.Args[2:])
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -72,7 +77,34 @@ func main() {
 		if err := server.RunDashboard(ctx, cfg); err != nil {
 			fatalf("dashboard: %v", err)
 		}
+	case "report":
+		if err := runReport(ctx, cfg, *month); err != nil {
+			fatalf("report: %v", err)
+		}
 	}
+}
+
+// runReport sends the Telegram monthly report for a given month immediately,
+// bypassing the daemon's month-rollover gate (useful for testing / re-sends).
+func runReport(ctx context.Context, cfg *config.Config, month string) error {
+	if !cfg.Telegram.Enabled {
+		return fmt.Errorf("telegram.enabled is false: set enabled + bot_token + chat_id to send reports")
+	}
+	if month == "" {
+		month = time.Now().Format("2006-01")
+	}
+	st, err := store.Open(cfg.Storage.DBPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	cat := category.Build(cfg.Dashboard.Categories, cfg.Dashboard.Budgets)
+	mon := telegram.NewMonitor(cfg.Telegram, st, cat)
+	fmt.Printf("Sending Telegram monthly report for %s ...\n", month)
+	mon.SendReport(ctx, month)
+	fmt.Println("Done. Check your Telegram chat (send errors, if any, are logged above).")
+	return nil
 }
 
 // runASPSPs lists the banks available for the configured country, so you can
@@ -107,6 +139,7 @@ Commands:
   serve       Start the daemon (periodic sync + web dashboard + Telegram)
   sync-once   Run a single sync and exit
   dashboard   Serve only the web dashboard (no sync)
+  report      Send the Telegram monthly report now [--month YYYY-MM]
   help        Show this message
 `)
 }

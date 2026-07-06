@@ -1,17 +1,17 @@
-# Configurazione di expense_monitor. Copia in config.yaml e compila i valori.
+# expense_monitor configuration. Copy to config.yaml and fill in the values.
 
 enablebanking:
   base_url: https://api.enablebanking.com
-  application_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"  # ID applicazione (Control Panel)
-  private_key_path: "/keys/app.pem"                        # chiave privata .pem scaricata alla registrazione
-  country: IT                                              # ISO 3166 (es. IT)
-  aspsp_name: ""                                           # nome esatto della banca (da GET /aspsps)
+  application_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"  # application ID (Control Panel)
+  private_key_path: "/keys/app.pem"                        # .pem private key downloaded at registration
+  country: IT                                              # ISO 3166 (e.g. IT)
+  aspsp_name: ""                                           # exact bank name (from GET /aspsps)
   psu_type: personal
-  consent_days: 90                                         # durata del consenso (max ~90 per conti personali)
+  consent_days: 90                                         # consent lifetime (max ~90 for personal accounts)
 
 auth_server:
   listen_addr: ":7777"
-  redirect_url: "https://HOST.TAILNET.ts.net:7777/callback"  # deve essere whitelisted nel Control Panel
+  redirect_url: "https://HOST.TAILNET.ts.net:7777/callback"  # must be whitelisted in the Control Panel
   tls_cert_path: "/certs/HOST.TAILNET.ts.net.crt"            # `tailscale cert`
   tls_key_path: "/certs/HOST.TAILNET.ts.net.key"
 
@@ -20,8 +20,8 @@ storage:
   session_path: "/data/session.json"
 
 sync:
-  times_per_day: 2          # numero di sincronizzazioni al giorno (intervallo = 24h / questo valore)
-  initial_lookback_days: 90 # quanto indietro scaricare alla prima sync
+  times_per_day: 2          # syncs per day (interval = 24h / this value)
+  initial_lookback_days: 90 # how far back to download on the first sync
 
 # Web dashboard (served by `serve` on auth_server.listen_addr over HTTPS,
 # reusing the auth_server TLS certificate). Protected by basic auth.
@@ -49,6 +49,13 @@ dashboard:
       color: "#009688"
       icon: "💡"
       match_any: ["ENEL", "A2A", "TIM", "VODAFONE", "FASTWEB"]
+    # A savings category is money moved to savings, not an expense: it is
+    # excluded from spending totals/budgets and reported separately as "Saved".
+    - name: "Savings"
+      color: "#795548"
+      icon: "🏦"
+      savings: true
+      match_any: ["GIROCONTO", "DEPOSITO", "SAVINGS", "ACCANTONAMENTO"]
   # Monthly spending limits per category (shown as progress bars).
   budgets:
     - category: "Groceries"
@@ -56,12 +63,17 @@ dashboard:
     - category: "Dining"
       monthly_limit: 200.0
 
-# PREDISPOSTO per la prossima iterazione (non usato ora).
+# Telegram push notifications (sent by `serve`).
 telegram:
   enabled: false
-  bot_token: ""
-  chat_id: ""
-  rules:
-    - name: "spese sopra 100"
-      min_amount: 100.0
-      credit_debit: DBIT
+  bot_token: ""                 # from @BotFather
+  chat_id: ""                   # your chat/user id (e.g. from @userinfobot)
+  startup_ping: true            # one-time "daemon started" message on boot
+  session_alerts: true          # notify on session expiry and sync failures
+  spending_alert:
+    enabled: true
+    threshold: 200.0            # first alert when monthly spend (savings excluded) crosses this
+    step: 30.0                  # then again every +step: 230, 260, 290, ...
+  monthly_report:
+    enabled: true
+    with_chart: true            # attach a category spending bar chart image

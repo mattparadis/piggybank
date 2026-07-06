@@ -13,7 +13,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"time"
 
@@ -125,6 +124,7 @@ type overviewVM struct {
 	MonthLabel    string
 	MonthIn       float64
 	MonthOut      float64
+	MonthSaved    float64
 	Currency      string
 	CategorySpend []categorySpendVM
 	Recent        []txVM
@@ -170,35 +170,24 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	spendByCat := map[string]*categorySpendVM{}
-	for _, t := range monthTx {
-		if t.Amount >= 0 {
-			vm.MonthIn += t.Amount
-			continue
-		}
-		vm.MonthOut += -t.Amount
-		cat := s.categorize(t)
-		cs := spendByCat[cat.Name]
-		if cs == nil {
-			cs = &categorySpendVM{Category: cat}
-			spendByCat[cat.Name] = cs
-		}
-		cs.Spent += -t.Amount
-	}
-	for name, cs := range spendByCat {
-		if limit, ok := s.cat.Budget(name); ok {
-			cs.HasBudget = true
-			cs.Budget = limit
+	// Savings-aware totals: spending excludes savings categories, which are
+	// reported separately as MonthSaved.
+	sum := s.cat.Summarize(monthTx)
+	vm.MonthIn = sum.Income
+	vm.MonthOut = sum.Spent
+	vm.MonthSaved = sum.Saved
+	for _, cs := range sum.Categories {
+		csvm := categorySpendVM{Category: cs.Category, Spent: cs.Spent}
+		if limit, ok := s.cat.Budget(cs.Category.Name); ok {
+			csvm.HasBudget = true
+			csvm.Budget = limit
 			if limit > 0 {
-				cs.Pct = int(math.Min(100, cs.Spent/limit*100))
-				cs.Over = cs.Spent > limit
+				csvm.Pct = int(math.Min(100, cs.Spent/limit*100))
+				csvm.Over = cs.Spent > limit
 			}
 		}
-		vm.CategorySpend = append(vm.CategorySpend, *cs)
+		vm.CategorySpend = append(vm.CategorySpend, csvm)
 	}
-	sort.Slice(vm.CategorySpend, func(i, j int) bool {
-		return vm.CategorySpend[i].Spent > vm.CategorySpend[j].Spent
-	})
 
 	// Category doughnut chart (current month).
 	for _, cs := range vm.CategorySpend {

@@ -1,6 +1,6 @@
-// Package auth implementa il comando `auth`: avvia il consenso Enable Banking,
-// espone un callback HTTPS (certificati Tailscale), scambia il code con una
-// sessione e salva session.json.
+// Package auth implements the `auth` command: it starts the Enable Banking
+// consent flow, exposes an HTTPS callback (Tailscale certificates), exchanges
+// the code for a session and saves session.json.
 package auth
 
 import (
@@ -19,15 +19,15 @@ import (
 	"expense_monitor/internal/session"
 )
 
-// Run esegue l'intero flusso di autorizzazione.
+// Run performs the entire authorization flow.
 func Run(ctx context.Context, cfg *config.Config) error {
 	eb := cfg.EnableBanking
 	if eb.ASPSPName == "" {
-		return fmt.Errorf("enablebanking.aspsp_name mancante: elenca le banche con `aspsps` e imposta il nome esatto")
+		return fmt.Errorf("enablebanking.aspsp_name is missing: list banks with `aspsps` and set the exact name")
 	}
 	as := cfg.AuthServer
 	if as.RedirectURL == "" || as.TLSCertPath == "" || as.TLSKeyPath == "" {
-		return fmt.Errorf("auth_server.redirect_url, tls_cert_path e tls_key_path sono richiesti")
+		return fmt.Errorf("auth_server.redirect_url, tls_cert_path and tls_key_path are required")
 	}
 
 	client, err := enablebanking.New(eb.BaseURL, eb.ApplicationID, eb.PrivateKeyPath)
@@ -35,10 +35,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 
-	// Percorso del callback ricavato dal redirect_url configurato.
+	// Callback path derived from the configured redirect_url.
 	redirect, err := url.Parse(as.RedirectURL)
 	if err != nil {
-		return fmt.Errorf("redirect_url non valido: %w", err)
+		return fmt.Errorf("invalid redirect_url: %w", err)
 	}
 	callbackPath := redirect.Path
 	if callbackPath == "" {
@@ -59,10 +59,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		PSUType:     eb.PSUType,
 	})
 	if err != nil {
-		return fmt.Errorf("avvio autorizzazione: %w", err)
+		return fmt.Errorf("start authorization: %w", err)
 	}
 
-	// Attende il callback con il code.
+	// Wait for the callback carrying the code.
 	type result struct {
 		code string
 		err  error
@@ -72,22 +72,22 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		if e := q.Get("error"); e != "" {
-			http.Error(w, "Autorizzazione negata: "+e, http.StatusBadRequest)
+			http.Error(w, "Authorization denied: "+e, http.StatusBadRequest)
 			resCh <- result{err: fmt.Errorf("callback error: %s", e)}
 			return
 		}
 		if got := q.Get("state"); got != state {
-			http.Error(w, "state non corrispondente", http.StatusBadRequest)
-			resCh <- result{err: errors.New("state non corrispondente (possibile CSRF)")}
+			http.Error(w, "state mismatch", http.StatusBadRequest)
+			resCh <- result{err: errors.New("state mismatch (possible CSRF)")}
 			return
 		}
 		code := q.Get("code")
 		if code == "" {
-			http.Error(w, "code mancante", http.StatusBadRequest)
-			resCh <- result{err: errors.New("code mancante nel callback")}
+			http.Error(w, "missing code", http.StatusBadRequest)
+			resCh <- result{err: errors.New("missing code in callback")}
 			return
 		}
-		fmt.Fprintln(w, "Autorizzazione completata. Puoi chiudere questa pagina e tornare al terminale.")
+		fmt.Fprintln(w, "Authorization complete. You can close this page and return to the terminal.")
 		resCh <- result{code: code}
 	})
 
@@ -100,11 +100,11 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		}
 	}()
 
-	fmt.Println("Apri questo link nel browser per autorizzare l'accesso al conto:")
+	fmt.Println("Open this link in your browser to authorize account access:")
 	fmt.Println()
 	fmt.Println("   " + authResp.URL)
 	fmt.Println()
-	fmt.Printf("In ascolto del callback su %s%s ...\n", as.ListenAddr, callbackPath)
+	fmt.Printf("Listening for the callback on %s%s ...\n", as.ListenAddr, callbackPath)
 	openBrowser(authResp.URL)
 
 	var code string
@@ -124,7 +124,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	sessResp, err := client.CreateSession(ctx, code)
 	if err != nil {
-		return fmt.Errorf("creazione sessione: %w", err)
+		return fmt.Errorf("create session: %w", err)
 	}
 
 	sess := &session.Session{
@@ -143,10 +143,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		})
 	}
 	if err := session.Save(cfg.Storage.SessionPath, sess); err != nil {
-		return fmt.Errorf("salvataggio sessione: %w", err)
+		return fmt.Errorf("save session: %w", err)
 	}
 
-	fmt.Printf("Sessione salvata in %s (scade il %s), %d conti autorizzati.\n",
+	fmt.Printf("Session saved to %s (expires %s), %d authorized accounts.\n",
 		cfg.Storage.SessionPath, sess.ValidUntil.Format(time.RFC3339), len(sess.Accounts))
 	return nil
 }

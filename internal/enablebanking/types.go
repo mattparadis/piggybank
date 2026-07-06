@@ -2,7 +2,7 @@ package enablebanking
 
 import "encoding/json"
 
-// ASPSP è una banca disponibile (GET /aspsps).
+// ASPSP is an available bank (GET /aspsps).
 type ASPSP struct {
 	Name    string `json:"name"`
 	Country string `json:"country"`
@@ -12,18 +12,18 @@ type aspspsResponse struct {
 	ASPSPs []ASPSP `json:"aspsps"`
 }
 
-// Access definisce fino a quando è valido il consenso.
+// Access defines until when the consent is valid.
 type Access struct {
 	ValidUntil string `json:"valid_until"`
 }
 
-// ASPSPRef identifica la banca nelle richieste.
+// ASPSPRef identifies the bank in requests.
 type ASPSPRef struct {
 	Name    string `json:"name"`
 	Country string `json:"country"`
 }
 
-// AuthRequest è il body di POST /auth.
+// AuthRequest is the body of POST /auth.
 type AuthRequest struct {
 	Access      Access   `json:"access"`
 	ASPSP       ASPSPRef `json:"aspsp"`
@@ -32,19 +32,19 @@ type AuthRequest struct {
 	PSUType     string   `json:"psu_type"`
 }
 
-// AuthResponse è la risposta di POST /auth.
+// AuthResponse is the response of POST /auth.
 type AuthResponse struct {
 	URL             string `json:"url"`
 	AuthorizationID string `json:"authorization_id"`
 	PSUIDHash       string `json:"psu_id_hash"`
 }
 
-// AccountID contiene l'IBAN del conto.
+// AccountID contains the account IBAN.
 type AccountID struct {
 	IBAN string `json:"iban"`
 }
 
-// Account è un conto autorizzato restituito da POST /sessions.
+// Account is an authorized account returned by POST /sessions.
 type Account struct {
 	UID             string    `json:"uid"`
 	AccountID       AccountID `json:"account_id"`
@@ -54,7 +54,7 @@ type Account struct {
 	Product         string    `json:"product"`
 }
 
-// SessionResponse è la risposta di POST /sessions e GET /sessions/{id}.
+// SessionResponse is the response of POST /sessions and GET /sessions/{id}.
 type SessionResponse struct {
 	SessionID string    `json:"session_id"`
 	Accounts  []Account `json:"accounts"`
@@ -63,7 +63,7 @@ type SessionResponse struct {
 	Access    Access    `json:"access"`
 }
 
-// Amount è un importo monetario (amount è una stringa nell'API).
+// Amount is a monetary amount (amount is a string in the API).
 type Amount struct {
 	Currency string `json:"currency"`
 	Amount   string `json:"amount"`
@@ -83,12 +83,12 @@ type balancesResponse struct {
 	Balances []Balance `json:"balances"`
 }
 
-// Party è una controparte (creditor/debtor).
+// Party is a counterparty (creditor/debtor).
 type Party struct {
 	Name string `json:"name"`
 }
 
-// Transaction è una singola transazione.
+// Transaction is a single transaction.
 type Transaction struct {
 	TransactionID         string    `json:"transaction_id"`
 	EntryReference        string    `json:"entry_reference"`
@@ -107,28 +107,28 @@ type Transaction struct {
 	MerchantCategoryCode  string    `json:"merchant_category_code"`
 }
 
-// transactionsResponse mantiene le transazioni come RawMessage così da poter
-// conservare il JSON originale completo in SQLite oltre ai campi mappati.
+// transactionsResponse keeps the transactions as RawMessage so it can
+// preserve the full original JSON in SQLite in addition to the mapped fields.
 type transactionsResponse struct {
 	Transactions    []json.RawMessage `json:"transactions"`
 	ContinuationKey string            `json:"continuation_key"`
 }
 
-// TransactionsParams sono i parametri di query di GET /accounts/{uid}/transactions.
+// TransactionsParams are the query parameters of GET /accounts/{uid}/transactions.
 type TransactionsParams struct {
-	DateFrom        string // YYYY-MM-DD (inclusivo)
-	DateTo          string // YYYY-MM-DD (inclusivo)
+	DateFrom        string // YYYY-MM-DD (inclusive)
+	DateTo          string // YYYY-MM-DD (inclusive)
 	ContinuationKey string
 	Strategy        string
 }
 
-// RawTransaction accoppia la transazione mappata al suo JSON grezzo.
+// RawTransaction pairs the mapped transaction with its raw JSON.
 type RawTransaction struct {
 	Tx  Transaction
 	Raw json.RawMessage
 }
 
-// TransactionsPage è una pagina di risultati.
+// TransactionsPage is a page of results.
 type TransactionsPage struct {
 	Transactions    []RawTransaction
 	ContinuationKey string

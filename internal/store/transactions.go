@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// AccountRecord è la riga della tabella accounts.
+// AccountRecord is a row of the accounts table.
 type AccountRecord struct {
 	UID      string
 	IBAN     string
@@ -14,8 +14,8 @@ type AccountRecord struct {
 	RawJSON  string
 }
 
-// TxRecord è la riga della tabella transactions. Il chiamante (syncer) calcola
-// DedupKey e Amount (con segno).
+// TxRecord is a row of the transactions table. The caller (syncer) computes
+// DedupKey and Amount (signed).
 type TxRecord struct {
 	AccountUID           string
 	DedupKey             string
@@ -34,7 +34,7 @@ type TxRecord struct {
 	RawJSON              string
 }
 
-// SyncState traccia lo stato di sincronizzazione incrementale per conto.
+// SyncState tracks the incremental synchronization state per account.
 type SyncState struct {
 	AccountUID      string
 	LastSyncedAt    string
@@ -43,7 +43,7 @@ type SyncState struct {
 
 func nowUTC() string { return time.Now().UTC().Format(time.RFC3339) }
 
-// UpsertAccount inserisce o aggiorna un conto.
+// UpsertAccount inserts or updates an account.
 func (s *Store) UpsertAccount(a AccountRecord) error {
 	_, err := s.db.Exec(`
 		INSERT INTO accounts (account_uid, iban, name, currency, product, raw_json, updated_at)
@@ -59,9 +59,9 @@ func (s *Store) UpsertAccount(a AccountRecord) error {
 	return err
 }
 
-// UpsertTransactions inserisce le transazioni in modo idempotente (chiave
-// account_uid + dedup_key) e aggiorna quelle già presenti (es. stato PDNG->BOOK).
-// Ritorna il numero di transazioni realmente nuove (utile per le notifiche).
+// UpsertTransactions inserts transactions idempotently (key
+// account_uid + dedup_key) and updates those already present (e.g. status PDNG->BOOK).
+// Returns the number of genuinely new transactions (useful for notifications).
 func (s *Store) UpsertTransactions(txs []TxRecord) (int, error) {
 	if len(txs) == 0 {
 		return 0, nil
@@ -111,7 +111,7 @@ func (s *Store) UpsertTransactions(txs []TxRecord) (int, error) {
 			newCount++
 			continue
 		}
-		// Già presente: aggiorna i campi che possono cambiare.
+		// Already present: update the fields that can change.
 		if _, err := update.Exec(
 			t.TransactionID, t.Amount, t.Status, t.BookingDate, t.ValueDate,
 			t.TransactionDate, t.Reference, t.Remittance,
@@ -126,7 +126,7 @@ func (s *Store) UpsertTransactions(txs []TxRecord) (int, error) {
 	return newCount, nil
 }
 
-// GetSyncState ritorna lo stato di sync di un conto (zero-value se assente).
+// GetSyncState returns the sync state of an account (zero-value if absent).
 func (s *Store) GetSyncState(accountUID string) (SyncState, error) {
 	st := SyncState{AccountUID: accountUID}
 	row := s.db.QueryRow(
@@ -150,7 +150,7 @@ func (s *Store) GetSyncState(accountUID string) (SyncState, error) {
 	}
 }
 
-// SetSyncState salva lo stato di sync di un conto.
+// SetSyncState saves the sync state of an account.
 func (s *Store) SetSyncState(st SyncState) error {
 	_, err := s.db.Exec(`
 		INSERT INTO sync_state (account_uid, last_synced_at, last_booking_date)

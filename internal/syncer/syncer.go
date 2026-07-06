@@ -1,5 +1,5 @@
-// Package syncer scarica le transazioni dei conti autorizzati e le salva in
-// SQLite in modo incrementale e idempotente.
+// Package syncer downloads transactions for the authorized accounts and stores
+// them in SQLite incrementally and idempotently.
 package syncer
 
 import (
@@ -17,13 +17,13 @@ import (
 	"expense_monitor/internal/store"
 )
 
-// Result riassume l'esito di una sincronizzazione.
+// Result summarizes the outcome of a sync.
 type Result struct {
 	Accounts        int
 	NewTransactions int
 }
 
-// RunOnce apre le dipendenze da config ed esegue una singola sincronizzazione.
+// RunOnce opens the dependencies from config and runs a single sync.
 func RunOnce(ctx context.Context, cfg *config.Config) error {
 	client, err := enablebanking.New(cfg.EnableBanking.BaseURL, cfg.EnableBanking.ApplicationID, cfg.EnableBanking.PrivateKeyPath)
 	if err != nil {
@@ -31,7 +31,7 @@ func RunOnce(ctx context.Context, cfg *config.Config) error {
 	}
 	sess, err := session.Load(cfg.Storage.SessionPath)
 	if err != nil {
-		return fmt.Errorf("sessione non disponibile (%w): esegui prima `auth`", err)
+		return fmt.Errorf("session unavailable (%w): run `auth` first", err)
 	}
 	st, err := store.Open(cfg.Storage.DBPath)
 	if err != nil {
@@ -43,12 +43,12 @@ func RunOnce(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Sincronizzazione completata: %d conti, %d nuove transazioni.\n", res.Accounts, res.NewTransactions)
+	fmt.Printf("Sync complete: %d accounts, %d new transactions.\n", res.Accounts, res.NewTransactions)
 	return nil
 }
 
-// Sync sincronizza tutti i conti della sessione. Ritorna ErrSessionExpired se
-// il consenso è scaduto (localmente o via 401/403 dall'API).
+// Sync syncs all accounts of the session. Returns ErrSessionExpired if the
+// consent has expired (locally or via 401/403 from the API).
 func Sync(ctx context.Context, cfg *config.Config, client *enablebanking.Client, sess *session.Session, st *store.Store) (Result, error) {
 	var res Result
 	if sess.Expired() {
@@ -105,8 +105,8 @@ func syncBalances(ctx context.Context, client *enablebanking.Client, st *store.S
 	}
 }
 
-// syncAccount pagina tutte le transazioni di un conto a partire da date_from
-// (incrementale) e le salva.
+// syncAccount pages through all transactions of an account starting from
+// date_from (incremental) and stores them.
 func syncAccount(ctx context.Context, cfg *config.Config, client *enablebanking.Client, st *store.Store, accountUID string) (int, string, error) {
 	prev, err := st.GetSyncState(accountUID)
 	if err != nil {
@@ -152,7 +152,7 @@ func syncAccount(ctx context.Context, cfg *config.Config, client *enablebanking.
 	return newCount, lastBooking, nil
 }
 
-// toRecord mappa una transazione dell'API alla riga di SQLite.
+// toRecord maps an API transaction to its SQLite row.
 func toRecord(accountUID string, rt enablebanking.RawTransaction) store.TxRecord {
 	tx := rt.Tx
 	amount, _ := strconv.ParseFloat(strings.TrimSpace(tx.TransactionAmount.Amount), 64)
@@ -180,8 +180,8 @@ func toRecord(accountUID string, rt enablebanking.RawTransaction) store.TxRecord
 	}
 }
 
-// dedupKey usa il transaction_id se presente, altrimenti un hash stabile dei
-// campi identificativi (alcune banche non forniscono transaction_id).
+// dedupKey uses the transaction_id when present, otherwise a stable hash of the
+// identifying fields (some banks do not provide a transaction_id).
 func dedupKey(tx enablebanking.Transaction) string {
 	if tx.TransactionID != "" {
 		return "id:" + tx.TransactionID

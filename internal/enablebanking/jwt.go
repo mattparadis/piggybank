@@ -10,8 +10,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// tokenSource genera e mette in cache il JWT RS256 usato per autenticarsi verso
-// l'API. Il token dura un'ora e viene rigenerato poco prima della scadenza.
+// tokenSource generates and caches the RS256 JWT used to authenticate against
+// the API. The token lasts one hour and is regenerated shortly before expiry.
 type tokenSource struct {
 	appID string
 	key   *rsa.PrivateKey
@@ -33,7 +33,7 @@ func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
 	return key, nil
 }
 
-// token restituisce un JWT valido, rigenerandolo se mancante o quasi scaduto.
+// token returns a valid JWT, regenerating it if missing or nearly expired.
 func (t *tokenSource) token() (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

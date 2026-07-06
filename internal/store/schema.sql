@@ -1,4 +1,4 @@
--- Schema SQLite di expense_monitor. Eseguito ad ogni avvio (idempotente).
+-- expense_monitor SQLite schema. Run at every startup (idempotent).
 
 CREATE TABLE IF NOT EXISTS accounts (
     account_uid TEXT PRIMARY KEY,
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     account_uid            TEXT NOT NULL REFERENCES accounts(account_uid),
     dedup_key              TEXT NOT NULL,
     transaction_id         TEXT,
-    amount                 REAL NOT NULL,          -- con segno: negativo per addebiti (DBIT)
+    amount                 REAL NOT NULL,          -- signed: negative for debits (DBIT)
     currency               TEXT,
     credit_debit_indicator TEXT,                   -- CRDT / DBIT
     status                 TEXT,                   -- BOOK / PDNG ...
@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS transactions (
     value_date             TEXT,
     transaction_date       TEXT,
     reference              TEXT,
-    remittance_information TEXT,                    -- righe unite da "\n"
+    remittance_information TEXT,                    -- lines joined by "\n"
     creditor_name          TEXT,
     debtor_name            TEXT,
-    raw_json               TEXT,                    -- JSON originale della transazione
+    raw_json               TEXT,                    -- original transaction JSON
     created_at             TEXT NOT NULL,
     UNIQUE(account_uid, dedup_key)
 );
@@ -48,4 +48,10 @@ CREATE TABLE IF NOT EXISTS balances (
     reference_date TEXT,
     updated_at     TEXT NOT NULL,
     PRIMARY KEY(account_uid, balance_type)
+);
+
+-- Generic key/value store for daemon state (e.g. Telegram notification cursors).
+CREATE TABLE IF NOT EXISTS kv (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );

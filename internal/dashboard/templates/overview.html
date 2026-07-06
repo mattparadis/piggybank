@@ -25,6 +25,10 @@
 			<div class="card-label">Spending · {{.MonthLabel}}</div>
 			<div class="card-value neg">{{money .MonthOut}} <span class="cur">{{.Currency}}</span></div>
 		</div>
+		<div class="card">
+			<div class="card-label">Saved · {{.MonthLabel}}</div>
+			<div class="card-value pos">{{money .MonthSaved}} <span class="cur">{{.Currency}}</span></div>
+		</div>
 	</section>
 
 	<section class="grid-2">

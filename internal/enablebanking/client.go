@@ -1,5 +1,5 @@
-// Package enablebanking è un client per l'API di Enable Banking (autenticazione
-// JWT RS256, avvio consenso, sessioni, conti e transazioni).
+// Package enablebanking is a client for the Enable Banking API (JWT RS256
+// authentication, consent initiation, sessions, accounts and transactions).
 package enablebanking
 
 import (
@@ -15,18 +15,18 @@ import (
 	"time"
 )
 
-// ErrSessionExpired indica che la sessione/consenso non è più valida (HTTP
-// 401/403): occorre rilanciare il comando `auth`.
-var ErrSessionExpired = errors.New("enablebanking: sessione scaduta o non autorizzata")
+// ErrSessionExpired indicates that the session/consent is no longer valid (HTTP
+// 401/403): the `auth` command must be re-run.
+var ErrSessionExpired = errors.New("enablebanking: session expired or unauthorized")
 
-// Client parla con l'API di Enable Banking.
+// Client talks to the Enable Banking API.
 type Client struct {
 	baseURL string
 	http    *http.Client
 	ts      *tokenSource
 }
 
-// New costruisce il client caricando la chiave privata RSA per la firma JWT.
+// New builds the client by loading the RSA private key used for JWT signing.
 func New(baseURL, appID, privateKeyPath string) (*Client, error) {
 	key, err := loadPrivateKey(privateKeyPath)
 	if err != nil {
@@ -39,7 +39,7 @@ func New(baseURL, appID, privateKeyPath string) (*Client, error) {
 	}, nil
 }
 
-// do esegue una richiesta autenticata e decodifica la risposta JSON in out.
+// do performs an authenticated request and decodes the JSON response into out.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body, out any) error {
 	var reqBody io.Reader
 	if body != nil {
@@ -99,7 +99,7 @@ func snippet(b []byte) string {
 	return string(b)
 }
 
-// ListASPSPs elenca le banche disponibili per un paese (ISO 3166, es. "IT").
+// ListASPSPs lists the banks available for a country (ISO 3166, e.g. "IT").
 func (c *Client) ListASPSPs(ctx context.Context, country string) ([]ASPSP, error) {
 	q := url.Values{}
 	q.Set("country", country)
@@ -110,7 +110,7 @@ func (c *Client) ListASPSPs(ctx context.Context, country string) ([]ASPSP, error
 	return out.ASPSPs, nil
 }
 
-// StartAuth avvia l'autorizzazione e restituisce l'URL di consenso.
+// StartAuth starts the authorization and returns the consent URL.
 func (c *Client) StartAuth(ctx context.Context, req AuthRequest) (*AuthResponse, error) {
 	var out AuthResponse
 	if err := c.do(ctx, http.MethodPost, "/auth", nil, req, &out); err != nil {
@@ -119,7 +119,7 @@ func (c *Client) StartAuth(ctx context.Context, req AuthRequest) (*AuthResponse,
 	return &out, nil
 }
 
-// CreateSession scambia il code di autorizzazione con una sessione.
+// CreateSession exchanges the authorization code for a session.
 func (c *Client) CreateSession(ctx context.Context, code string) (*SessionResponse, error) {
 	var out SessionResponse
 	body := map[string]string{"code": code}
@@ -129,8 +129,8 @@ func (c *Client) CreateSession(ctx context.Context, code string) (*SessionRespon
 	return &out, nil
 }
 
-// GetSession recupera i dati di una sessione esistente (utile per validare la
-// scadenza lato server).
+// GetSession retrieves the data of an existing session (useful to validate the
+// expiry on the server side).
 func (c *Client) GetSession(ctx context.Context, sessionID string) (*SessionResponse, error) {
 	var out SessionResponse
 	if err := c.do(ctx, http.MethodGet, "/sessions/"+url.PathEscape(sessionID), nil, nil, &out); err != nil {
@@ -149,7 +149,7 @@ func (c *Client) GetBalances(ctx context.Context, accountUID string) ([]Balance,
 	return out.Balances, nil
 }
 
-// GetTransactionsPage recupera una pagina di transazioni di un conto.
+// GetTransactionsPage retrieves a page of transactions for an account.
 func (c *Client) GetTransactionsPage(ctx context.Context, accountUID string, p TransactionsParams) (*TransactionsPage, error) {
 	q := url.Values{}
 	if p.DateFrom != "" {

@@ -1,6 +1,6 @@
-// Package server implementa il comando `serve`: un daemon che sincronizza le
-// transazioni periodicamente. Dashboard web e bot Telegram sono predisposti
-// (vedi TODO) ma non implementati in questa iterazione.
+// Package server implements the `serve` command: a daemon that syncs
+// transactions periodically, serves the web dashboard and pushes Telegram
+// notifications, all sharing the same process and store.
 package server
 
 import (
@@ -18,10 +18,11 @@ import (
 	"expense_monitor/internal/session"
 	"expense_monitor/internal/store"
 	"expense_monitor/internal/syncer"
+	"expense_monitor/internal/telegram"
 )
 
-// Run avvia il daemon: una sync all'avvio, poi a intervalli regolari finché il
-// contesto non viene annullato (SIGINT/SIGTERM).
+// Run starts the daemon: one sync on startup, then at regular intervals until
+// the context is canceled (SIGINT/SIGTERM).
 func Run(ctx context.Context, cfg *config.Config) error {
 	client, err := enablebanking.New(cfg.EnableBanking.BaseURL, cfg.EnableBanking.ApplicationID, cfg.EnableBanking.PrivateKeyPath)
 	if err != nil {
@@ -47,44 +48,58 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		defer stopDashboard()
 	}
 
-	// TODO(telegram): avviare qui il bot e usare un notify.TelegramNotifier
-	// applicando le regole di cfg.Telegram.Rules.
+	var mon *telegram.Monitor
+	if cfg.Telegram.Enabled {
+		cat := category.Build(cfg.Dashboard.Categories, cfg.Dashboard.Budgets)
+		mon = telegram.NewMonitor(cfg.Telegram, st, cat)
+		mon.StartupPing(ctx)
+	}
 
-	n.Info(fmt.Sprintf("daemon avviato, sincronizzazione ogni %s", interval))
-	runSync(ctx, cfg, client, st, n)
+	n.Info(fmt.Sprintf("daemon started, syncing every %s", interval))
+	runSync(ctx, cfg, client, st, n, mon)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			n.Info("arresto del daemon")
+			n.Info("daemon stopping")
 			return nil
 		case <-ticker.C:
-			runSync(ctx, cfg, client, st, n)
+			runSync(ctx, cfg, client, st, n, mon)
 		}
 	}
 }
 
-// runSync ricarica la sessione (potrebbe essere stata aggiornata da `auth`) ed
-// esegue una sincronizzazione, segnalando la scadenza senza terminare il daemon.
-func runSync(ctx context.Context, cfg *config.Config, client *enablebanking.Client, st *store.Store, n notify.Notifier) {
+// runSync reloads the session (it may have been refreshed by `auth`) and runs a
+// sync, reporting expiry without terminating the daemon. Telegram notifications
+// are pushed via mon when configured.
+func runSync(ctx context.Context, cfg *config.Config, client *enablebanking.Client, st *store.Store, n notify.Notifier, mon *telegram.Monitor) {
 	sess, err := session.Load(cfg.Storage.SessionPath)
 	if err != nil {
-		n.Alert(fmt.Sprintf("sessione non disponibile (%v): esegui `auth`", err))
+		n.Alert(fmt.Sprintf("session unavailable (%v): run `auth`", err))
 		return
 	}
 
 	res, err := syncer.Sync(ctx, cfg, client, sess, st)
 	if err != nil {
 		if errors.Is(err, enablebanking.ErrSessionExpired) {
-			n.Alert("sessione scaduta o non valida: rilancia il comando `auth` per riautorizzare")
+			n.Alert("session expired or invalid: run `auth` again to re-authorize")
+			if mon != nil {
+				mon.SessionExpired(ctx)
+			}
 			return
 		}
-		n.Alert(fmt.Sprintf("sincronizzazione fallita: %v", err))
+		n.Alert(fmt.Sprintf("sync failed: %v", err))
+		if mon != nil {
+			mon.SyncFailed(ctx, err)
+		}
 		return
 	}
-	n.Info(fmt.Sprintf("sync ok: %d conti, %d nuove transazioni", res.Accounts, res.NewTransactions))
+	n.Info(fmt.Sprintf("sync ok: %d accounts, %d new transactions", res.Accounts, res.NewTransactions))
+	if mon != nil {
+		mon.AfterSync(ctx)
+	}
 }
 
 // startDashboard builds the dashboard handler and serves it over HTTPS in a
@@ -97,7 +112,7 @@ func startDashboard(cfg *config.Config, st *store.Store, n notify.Notifier) (fun
 	}
 	srv := &http.Server{Addr: cfg.AuthServer.ListenAddr, Handler: handler}
 	go func() {
-		n.Info("dashboard in ascolto su https://" + cfg.AuthServer.ListenAddr)
+		n.Info("dashboard listening on https://" + cfg.AuthServer.ListenAddr)
 		err := srv.ListenAndServeTLS(cfg.AuthServer.TLSCertPath, cfg.AuthServer.TLSKeyPath)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			n.Alert("dashboard server: " + err.Error())
@@ -113,7 +128,7 @@ func startDashboard(cfg *config.Config, st *store.Store, n notify.Notifier) (fun
 // RunDashboard serves only the dashboard (no sync), until the context is done.
 func RunDashboard(ctx context.Context, cfg *config.Config) error {
 	if !cfg.Dashboard.Enabled {
-		return fmt.Errorf("dashboard.enabled è false: abilitala nel config")
+		return fmt.Errorf("dashboard.enabled is false: enable it in the config")
 	}
 	st, err := store.Open(cfg.Storage.DBPath)
 	if err != nil {

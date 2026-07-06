@@ -4,15 +4,15 @@ services:
     image: expense_monitor:latest
     container_name: expense_monitor
     restart: unless-stopped
-    # Callback auth ora, dashboard in futuro: porta 7777.
+    # Auth callback now, dashboard in the future: port 7777.
     ports:
       - "7777:7777"
     command: ["serve", "--config", "/config.yaml"]
     volumes:
-      - /srv/piggybank/config.yaml:/config.yaml:ro   # configurazione
-      - /srv/piggybank/keys:/keys:ro                 # chiave privata .pem
-      - /srv/piggybank/certs:/certs:ro               # certificati Tailscale
-      - /srv/piggybank/data:/data                    # session.json + expense_monitor.db (persistenti)
+      - /srv/piggybank/config.yaml:/config.yaml:ro   # configuration
+      - /srv/piggybank/keys:/keys:ro                 # private .pem key
+      - /srv/piggybank/certs:/certs:ro               # Tailscale certificates
+      - /srv/piggybank/data:/data                    # session.json + expense_monitor.db (persistent)
 
-# Autorizzazione una tantum (scrive /data/session.json, poi il servizio la usa):
+# One-off authorization (writes /data/session.json, then the service uses it):
 #   docker compose run --rm --service-ports monitor auth --config /config.yaml

@@ -1,20 +1,20 @@
-// Package notify definisce l'interfaccia di notifica. Per questa iterazione è
-// implementato solo LogNotifier; il bot Telegram è predisposto (vedi TODO).
+// Package notify defines the notification interface. This package provides
+// LogNotifier; the Telegram notifier is implemented in internal/telegram.
 package notify
 
 import "log"
 
-// Notifier riceve eventi informativi e allarmi.
+// Notifier receives informational events and alerts.
 type Notifier interface {
 	Info(msg string)
 	Alert(msg string)
 }
 
-// LogNotifier scrive le notifiche sul log standard.
+// LogNotifier writes notifications to the standard log.
 type LogNotifier struct{}
 
 func (LogNotifier) Info(msg string)  { log.Printf("[info] %s", msg) }
 func (LogNotifier) Alert(msg string) { log.Printf("[ALERT] %s", msg) }
 
-// TODO(telegram): TelegramNotifier implementerà Notifier inviando messaggi via
-// Bot API, applicando le regole configurate in config.Telegram.Rules.
+// LogNotifier is a simple fallback Notifier that logs every event; the
+// Telegram-based Notifier lives in internal/telegram.

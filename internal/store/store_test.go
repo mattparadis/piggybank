@@ -26,26 +26,26 @@ func TestUpsertTransactionsIsIdempotent(t *testing.T) {
 		{AccountUID: "acc-1", DedupKey: "id:t2", TransactionID: "t2", Amount: 20, Currency: "EUR", Status: "BOOK", BookingDate: "2026-07-02"},
 	}
 
-	// Primo upsert: due nuove.
+	// First upsert: two new.
 	n, err := st.UpsertTransactions(txs)
 	if err != nil {
 		t.Fatalf("UpsertTransactions: %v", err)
 	}
 	if n != 2 {
-		t.Fatalf("nuove transazioni = %d, atteso 2", n)
+		t.Fatalf("new transactions = %d, want 2", n)
 	}
 
-	// Secondo upsert identico: zero nuove.
+	// Second identical upsert: zero new.
 	n, err = st.UpsertTransactions(txs)
 	if err != nil {
 		t.Fatalf("UpsertTransactions (2): %v", err)
 	}
 	if n != 0 {
-		t.Errorf("nuove transazioni al re-upsert = %d, atteso 0", n)
+		t.Errorf("new transactions on re-upsert = %d, want 0", n)
 	}
 
 	if got := st.countTx(t); got != 2 {
-		t.Errorf("righe totali = %d, atteso 2 (nessun duplicato)", got)
+		t.Errorf("total rows = %d, want 2 (no duplicates)", got)
 	}
 }
 
@@ -62,10 +62,10 @@ func TestUpsertUpdatesStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Errorf("l'aggiornamento non deve contare come nuova: n=%d", n)
+		t.Errorf("the update must not count as new: n=%d", n)
 	}
 	if got := st.statusOf(t, "id:t1"); got != "BOOK" {
-		t.Errorf("status = %q, atteso BOOK", got)
+		t.Errorf("status = %q, want BOOK", got)
 	}
 }
 
@@ -82,13 +82,13 @@ func TestSyncStateRoundTrip(t *testing.T) {
 		t.Errorf("LastBookingDate = %q", got.LastBookingDate)
 	}
 
-	// Conto senza stato: zero-value senza errore.
+	// Account without state: zero-value with no error.
 	empty, err := st.GetSyncState("assente")
 	if err != nil {
-		t.Fatalf("GetSyncState assente: %v", err)
+		t.Fatalf("GetSyncState missing: %v", err)
 	}
 	if empty.LastBookingDate != "" {
-		t.Errorf("atteso stato vuoto, ottenuto %q", empty.LastBookingDate)
+		t.Errorf("expected empty state, got %q", empty.LastBookingDate)
 	}
 }
 

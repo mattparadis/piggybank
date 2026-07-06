@@ -1,5 +1,5 @@
-// Package store persiste conti e transazioni in SQLite (driver pure-Go
-// modernc.org/sqlite, nessun cgo).
+// Package store persists accounts and transactions in SQLite (pure-Go driver
+// modernc.org/sqlite, no cgo).
 package store
 
 import (
@@ -13,12 +13,12 @@ import (
 //go:embed schema.sql
 var schema string
 
-// Store incapsula la connessione al database.
+// Store wraps the database connection.
 type Store struct {
 	db *sql.DB
 }
 
-// Open apre (o crea) il database ed esegue le migrazioni.
+// Open opens (or creates) the database and runs the migrations.
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
 	if err != nil {
@@ -31,7 +31,7 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Close chiude la connessione.
+// Close closes the connection.
 func (s *Store) Close() error {
 	return s.db.Close()
 }

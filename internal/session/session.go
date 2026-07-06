@@ -1,5 +1,5 @@
-// Package session persiste la sessione Enable Banking (session_id + scadenza +
-// account autorizzati) su file JSON, condiviso tra il comando `auth` e il daemon.
+// Package session persists the Enable Banking session (session_id + expiry +
+// authorized accounts) to a JSON file, shared between the `auth` command and the daemon.
 package session
 
 import (
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Account è la versione minimale e stabile di un conto autorizzato.
+// Account is the minimal, stable representation of an authorized account.
 type Account struct {
 	UID      string `json:"uid"`
 	IBAN     string `json:"iban"`
@@ -17,7 +17,7 @@ type Account struct {
 	Currency string `json:"currency"`
 }
 
-// Session è ciò che viene salvato in session.json.
+// Session is what gets saved in session.json.
 type Session struct {
 	SessionID  string    `json:"session_id"`
 	ValidUntil time.Time `json:"valid_until"`
@@ -25,12 +25,12 @@ type Session struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// Expired indica se il consenso è scaduto secondo valid_until.
+// Expired reports whether the consent has expired according to valid_until.
 func (s *Session) Expired() bool {
 	return !s.ValidUntil.IsZero() && time.Now().After(s.ValidUntil)
 }
 
-// Load legge session.json.
+// Load reads session.json.
 func Load(path string) (*Session, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -43,8 +43,8 @@ func Load(path string) (*Session, error) {
 	return &s, nil
 }
 
-// Save scrive session.json con permessi restrittivi (contiene un riferimento
-// alla sessione bancaria).
+// Save writes session.json with restrictive permissions (it contains a
+// reference to the banking session).
 func Save(path string, s *Session) error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {

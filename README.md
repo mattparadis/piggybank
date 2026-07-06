@@ -1,82 +1,81 @@
 # expense_monitor
 
-Monitoraggio personale delle spese tramite le API di [Enable Banking](https://enablebanking.com/docs/).
-Scarica conti e transazioni dal tuo conto bancario e li salva in **SQLite**.
+Personal expense monitoring via the [Enable Banking](https://enablebanking.com/docs/) API.
+It downloads accounts and transactions from your bank and stores them in **SQLite**, serves
+a **web dashboard**, and pushes **Telegram** notifications.
 
-> Questa iterazione implementa **autenticazione + ingestione dati in SQLite** con un
-> daemon che sincronizza periodicamente. La **dashboard web** e le **notifiche Telegram**
-> sono predisposte (config e punti di aggancio) ma non ancora implementate.
+## How it works
 
-## Come funziona
+- **API authentication**: JWT RS256 signed with the application's `.pem` private key
+  (`kid` header = application_id).
+- **Consent**: the `auth` command starts the flow, exposes an **HTTPS** callback (Tailscale
+  certificates), receives the `code`, creates the session and saves it to `session.json`.
+- **Sync**: the `serve` command reads the session, downloads transactions (pagination via
+  `continuation_key`, incremental fetch) and stores them in SQLite idempotently. If the
+  session has expired, it warns you to run `auth` again.
+- **Dashboard & alerts**: `serve` also hosts the web dashboard and evaluates Telegram
+  notification rules after each sync.
 
-- **Autenticazione API**: JWT RS256 firmato con la chiave privata `.pem` dell'applicazione
-  (header `kid` = application_id).
-- **Consenso**: il comando `auth` avvia il flusso, espone un callback **HTTPS** (certificati
-  Tailscale), riceve il `code`, crea la sessione e la salva in `session.json`.
-- **Sincronizzazione**: il comando `serve` legge la sessione, scarica le transazioni
-  (paginazione via `continuation_key`, fetch incrementale) e le salva in SQLite in modo
-  idempotente. Se la sessione è scaduta, avvisa di rilanciare `auth`.
+## Prerequisites
 
-## Prerequisiti
-
-1. Account e applicazione su [Enable Banking Control Panel](https://enablebanking.com/docs/api/quick-start/),
-   con la chiave privata `.pem` scaricata (nome file = application_id).
-2. Nel Control Panel, aggiungi il **redirect URL** alla whitelist, es.
+1. Account and application on the [Enable Banking Control Panel](https://enablebanking.com/docs/api/quick-start/),
+   with the `.pem` private key downloaded (file name = application_id).
+2. In the Control Panel, add the **redirect URL** to the whitelist, e.g.
    `https://HOST.TAILNET.ts.net:7777/callback`.
-3. Certificato TLS per l'host (Tailscale):
+3. TLS certificate for the host (Tailscale):
    ```sh
    tailscale cert HOST.TAILNET.ts.net
-   # produce HOST.TAILNET.ts.net.crt e HOST.TAILNET.ts.net.key
+   # produces HOST.TAILNET.ts.net.crt and HOST.TAILNET.ts.net.key
    ```
 
-## Configurazione
+## Configuration
 
 ```sh
 cp config.example.yaml config.yaml
-# poi compila application_id, private_key_path, aspsp_name, redirect_url, cert/key
+# then fill in application_id, private_key_path, aspsp_name, redirect_url, cert/key
 ```
 
-Per trovare il nome esatto della banca (`aspsp_name`) puoi consultare `GET /aspsps?country=IT`.
+To find the exact bank name (`aspsp_name`) you can query `GET /aspsps?country=IT`.
 
-## Uso (locale)
+## Usage (local)
 
 ```sh
 go build -o expense_monitor .
 
-# 0. trova il nome esatto della tua banca e mettilo in aspsp_name
+# 0. find the exact name of your bank and put it in aspsp_name
 ./expense_monitor aspsps --config config.yaml
 
-# 1. autorizzazione una tantum (apre il browser, salva session.json)
+# 1. one-time authorization (opens the browser, saves session.json)
 ./expense_monitor auth --config config.yaml
 
-# 2a. sincronizzazione singola (utile per verificare)
+# 2a. single sync (handy to verify)
 ./expense_monitor sync-once --config config.yaml
 
-# 2b. daemon con polling periodico (24h / times_per_day)
+# 2b. daemon with periodic polling (24h / times_per_day)
 ./expense_monitor serve --config config.yaml
 ```
 
-## Uso (Docker)
+## Usage (Docker)
 
-Struttura consigliata delle cartelle (montate come volumi):
+Recommended folder layout (mounted as volumes):
 
 ```
 config.yaml
 keys/app.pem
 certs/HOST.TAILNET.ts.net.crt
 certs/HOST.TAILNET.ts.net.key
-data/            # session.json + expense_monitor.db (creati a runtime)
+data/            # session.json + expense_monitor.db (created at runtime)
 ```
 
-I path nel `config.yaml` puntano ai mount: `/keys/...`, `/certs/...`, `/data/...`.
+The paths in `config.yaml` point at the mounts: `/keys/...`, `/certs/...`, `/data/...`.
 
 ```sh
 docker compose build
 
-# 1. autorizzazione una tantum (espone la 7777 per il callback)
+# 1. one-time authorization (exposes 7777 for the callback)
 docker compose run --rm --service-ports monitor auth --config /config.yaml
 
-# 2. avvio del daemon
+# 2. start the daemon
 docker compose up -d
 docker compose logs -f
 ```
@@ -93,6 +92,7 @@ dashboard:
   basic_auth: { username: "me", password: "change-me" }
   categories:          # first matching keyword wins (case-insensitive)
     - { name: "Groceries", color: "#4caf50", icon: "🛒", match_any: ["ESSELUNGA","COOP"] }
+    - { name: "Savings", color: "#795548", icon: "🏦", savings: true, match_any: ["GIROCONTO"] }
   budgets:
     - { category: "Groceries", monthly_limit: 400.0 }
 ```
@@ -109,7 +109,47 @@ To run only the dashboard (no sync): `expense_monitor dashboard --config config.
 > re-authorize when the session expires, stop the daemon first
 > (`docker compose stop`), run `auth`, then start it again.
 
-## Ispezionare i dati
+## Savings category
+
+Mark a category with `savings: true` to treat matching transactions as **money moved to
+savings** rather than spending. Savings are excluded from spending totals, budget bars and
+the Telegram spending threshold, and are surfaced separately as a "Saved" figure on the
+dashboard overview and in the monthly report. This is a read-time rule — retag a category
+anytime by editing the YAML, no reindexing needed.
+
+## Telegram notifications
+
+The `serve` daemon can push notifications via the Telegram Bot API. Create a bot with
+[@BotFather](https://t.me/BotFather), get your chat id, and configure `telegram:` in
+`config.yaml`:
+
+```yaml
+telegram:
+  enabled: true
+  bot_token: "123456:ABC-DEF..."
+  chat_id: "12345678"
+  startup_ping: true            # one-time "daemon started" confirmation on boot
+  session_alerts: true          # session expiry + sync failure alerts
+  spending_alert:
+    enabled: true
+    threshold: 200.0            # first alert when monthly spend (savings excluded) crosses this
+    step: 30.0                  # then again every +step: 230, 260, 290, ...
+  monthly_report:
+    enabled: true
+    with_chart: true            # attach a category spending bar chart image
+```
+
+Notification types:
+
+- **Startup ping** — one message on boot confirming the bot is configured.
+- **Spending alert** — when cumulative monthly spending (savings excluded) crosses
+  `threshold`, and again for every additional `step`. The first sync of each month
+  establishes a silent baseline, so the initial historical backfill never fires an alert.
+- **Session/sync alerts** — when the Enable Banking session expires or a sync fails.
+- **Monthly report** — at the start of each new month, a summary of the month that just
+  ended (spent / saved / income / top categories), optionally with a bar-chart image.
+
+## Inspecting the data
 
 ```sh
 sqlite3 data/expense_monitor.db \
@@ -120,20 +160,21 @@ sqlite3 data/expense_monitor.db \
   "SELECT count(*), min(booking_date), max(booking_date) FROM transactions;"
 ```
 
-## Struttura del progetto
+## Project structure
 
 ```
-main.go                     dispatch sottocomandi (auth | serve | sync-once | dashboard | aspsps)
-internal/config             caricamento/validazione config YAML
-internal/session            persistenza session.json
-internal/enablebanking      client API (JWT RS256, endpoint, saldi)
-internal/store              SQLite (schema, upsert idempotente, query di lettura, sync_state)
-internal/auth               comando auth (callback HTTPS + creazione sessione)
-internal/syncer             motore di sincronizzazione incrementale (transazioni + saldi)
-internal/category           categorizzazione delle transazioni da regole YAML
-internal/dashboard          dashboard web (html/template + htmx + Chart.js embeddati)
-internal/server             daemon serve (scheduler + dashboard; telegram: TODO)
-internal/notify             interfaccia notifiche (log ora; Telegram: TODO)
+main.go                     subcommand dispatch (auth | serve | sync-once | dashboard | aspsps)
+internal/config             load/validate YAML config
+internal/session            session.json persistence
+internal/enablebanking      API client (JWT RS256, endpoints, balances)
+internal/store              SQLite (schema, idempotent upsert, read queries, sync_state, kv)
+internal/auth               auth command (HTTPS callback + session creation)
+internal/syncer             incremental sync engine (transactions + balances)
+internal/category           transaction categorization from YAML rules (+ savings-aware summary)
+internal/dashboard          web dashboard (html/template + htmx + embedded Chart.js)
+internal/telegram           Telegram notifications (client, spending alerts, monthly report)
+internal/server             serve daemon (scheduler + dashboard + Telegram)
+internal/notify             notification interface (log)
 ```
 
 ## Test

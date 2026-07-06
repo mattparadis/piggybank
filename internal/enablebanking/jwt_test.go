@@ -42,19 +42,19 @@ func TestTokenHeadersAndClaims(t *testing.T) {
 
 	parsed, err := jwt.Parse(raw, func(tok *jwt.Token) (any, error) {
 		if kid, _ := tok.Header["kid"].(string); kid != "my-app-id" {
-			t.Errorf("kid = %q, atteso my-app-id", kid)
+			t.Errorf("kid = %q, want my-app-id", kid)
 		}
 		if tok.Method.Alg() != "RS256" {
-			t.Errorf("alg = %q, atteso RS256", tok.Method.Alg())
+			t.Errorf("alg = %q, want RS256", tok.Method.Alg())
 		}
 		return &key.PublicKey, nil
 	})
 	if err != nil {
-		t.Fatalf("verifica firma fallita: %v", err)
+		t.Fatalf("signature verification failed: %v", err)
 	}
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		t.Fatalf("claims di tipo inatteso")
+		t.Fatalf("claims of unexpected type")
 	}
 	if claims["iss"] != "enablebanking.com" {
 		t.Errorf("iss = %v", claims["iss"])
@@ -63,7 +63,7 @@ func TestTokenHeadersAndClaims(t *testing.T) {
 		t.Errorf("aud = %v", claims["aud"])
 	}
 	if _, ok := claims["exp"]; !ok {
-		t.Errorf("claim exp mancante")
+		t.Errorf("exp claim missing")
 	}
 }
 
@@ -81,6 +81,6 @@ func TestTokenIsCached(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a != b {
-		t.Errorf("token non messo in cache: due valori diversi")
+		t.Errorf("token not cached: two different values")
 	}
 }

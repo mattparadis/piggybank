@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"strings"
 )
 
@@ -158,6 +159,33 @@ func (s *Store) ListTransactions(f TxFilter) ([]TxRecord, error) {
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// GetKV returns the value for a key and whether it was present.
+func (s *Store) GetKV(key string) (string, bool, error) {
+	var v string
+	err := s.db.QueryRow(`SELECT value FROM kv WHERE key = ?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return v, true, nil
+}
+
+// SetKV inserts or updates a key/value pair.
+func (s *Store) SetKV(key, value string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO kv (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
+	return err
+}
+
+// ListMonth returns all transactions booked in the given month (YYYY-MM),
+// used to compute savings-aware spending summaries.
+func (s *Store) ListMonth(month string) ([]TxRecord, error) {
+	return s.ListTransactions(TxFilter{DateFrom: month + "-01", DateTo: month + "-31"})
 }
 
 // CountTransactions returns the number of transactions matching the filter

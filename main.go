@@ -1,9 +1,9 @@
-// Command expense_monitor scarica conti e transazioni da Enable Banking e li
-// salva in SQLite. Sottocomandi:
+// Command expense_monitor downloads accounts and transactions from Enable
+// Banking and stores them in SQLite. Subcommands:
 //
-//	auth       flusso di consenso una tantum -> salva session.json
-//	serve      daemon: sincronizza periodicamente (dashboard/telegram: predisposti)
-//	sync-once  esegue una singola sincronizzazione ed esce (utile in dev)
+//	auth       one-time consent flow -> saves session.json
+//	serve      daemon: syncs periodically, serves the dashboard and Telegram alerts
+//	sync-once  runs a single sync and exits (handy in dev)
 package main
 
 import (
@@ -34,13 +34,13 @@ func main() {
 		return
 	}
 	if cmd != "auth" && cmd != "serve" && cmd != "sync-once" && cmd != "aspsps" && cmd != "dashboard" {
-		fmt.Fprintf(os.Stderr, "comando sconosciuto: %q\n\n", cmd)
+		fmt.Fprintf(os.Stderr, "unknown command: %q\n\n", cmd)
 		usage()
 		os.Exit(2)
 	}
 
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	cfgPath := fs.String("config", "config.yaml", "percorso del file di configurazione YAML")
+	cfgPath := fs.String("config", "config.yaml", "path to the YAML configuration file")
 	_ = fs.Parse(os.Args[2:])
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -75,8 +75,8 @@ func main() {
 	}
 }
 
-// runASPSPs elenca le banche disponibili per il paese configurato, così da
-// individuare il valore esatto da mettere in enablebanking.aspsp_name.
+// runASPSPs lists the banks available for the configured country, so you can
+// find the exact value to put in enablebanking.aspsp_name.
 func runASPSPs(ctx context.Context, cfg *config.Config) error {
 	eb := cfg.EnableBanking
 	client, err := enablebanking.New(eb.BaseURL, eb.ApplicationID, eb.PrivateKeyPath)
@@ -87,27 +87,27 @@ func runASPSPs(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Banche disponibili per %q (%d):\n", eb.Country, len(banks))
+	fmt.Printf("Banks available for %q (%d):\n", eb.Country, len(banks))
 	for _, b := range banks {
 		fmt.Printf("  %-40s [%s]\n", b.Name, b.Country)
 	}
-	fmt.Println("\nImposta enablebanking.aspsp_name con il nome esatto della tua banca.")
+	fmt.Println("\nSet enablebanking.aspsp_name to the exact name of your bank.")
 	return nil
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `expense_monitor - monitoraggio spese via Enable Banking
+	fmt.Fprint(os.Stderr, `expense_monitor - expense monitoring via Enable Banking
 
-Uso:
-  expense_monitor <comando> [--config config.yaml]
+Usage:
+  expense_monitor <command> [--config config.yaml]
 
-Comandi:
-  aspsps      Elenca le banche disponibili per il paese configurato
-  auth        Avvia il flusso di autorizzazione bancaria e salva la sessione
-  serve       Avvia il daemon (sincronizzazione periodica + dashboard web)
-  sync-once   Esegue una singola sincronizzazione ed esce
-  dashboard   Avvia solo la dashboard web (senza sincronizzazione)
-  help        Mostra questo messaggio
+Commands:
+  aspsps      List the banks available for the configured country
+  auth        Start the bank authorization flow and save the session
+  serve       Start the daemon (periodic sync + web dashboard + Telegram)
+  sync-once   Run a single sync and exit
+  dashboard   Serve only the web dashboard (no sync)
+  help        Show this message
 `)
 }
 

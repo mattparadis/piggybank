@@ -4,14 +4,14 @@
 FROM golang:1.26 AS build
 WORKDIR /src
 
-# Dipendenze (cache layer)
+# Dependencies (cache layer)
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Sorgenti
+# Sources
 COPY . .
 
-# SQLite è pure-Go (modernc.org/sqlite): binario statico senza cgo.
+# SQLite is pure-Go (modernc.org/sqlite): static binary without cgo.
 ENV CGO_ENABLED=0 GOOS=linux
 RUN go build -trimpath -ldflags="-s -w" -o /expense_monitor .
 
